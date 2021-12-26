@@ -22,6 +22,8 @@
 
     var provider = new firebase.auth.GoogleAuthProvider();
 
+    var queryHandles = {}
+
     signIn = function() {
       firebase.auth().signInWithRedirect(provider)
     }
@@ -52,7 +54,15 @@
 
       app.ports.sendQuery.subscribe(function(query) {
         console.log("query", JSON.stringify(query))
+
+        // if the handle is already registered, unregister it first
+        prevHandle = queryHandles[query.id]
+        if (prevHandle) {
+          prevHandle()
+        }
+
         var db = firebase.firestore();
+        db.useEmulator("localhost", 38080)
         var q = db
         for (i = 0; i < query.path.length; i++) {
           var pathElement = query.path[i]
@@ -65,10 +75,11 @@
 
         q = q.limit(query.limit)
 
-        q.onSnapshot((querySnapshot) => {
+        var handle = q.onSnapshot((querySnapshot) => {
           console.log("snapshot", querySnapshot)
           app.ports.queryResponseReceiver.send(querySnapshot)
         })
+        queryHandles[query.id] = handle
       });
     }
 
