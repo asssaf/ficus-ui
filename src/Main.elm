@@ -6,8 +6,9 @@ import Element exposing (..)
 import Element.Input as Input
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
-import Json.Decode exposing (Value)
+import Json.Decode exposing (..)
 import Query exposing (..)
+import Result.Extra as Result
 import Task
 import Time
 import Url
@@ -59,11 +60,19 @@ type alias Model =
     , flags : Flags
     , zone : Time.Zone
     , time : Time.Posix
+    , err : Maybe String
+    , nodes : List Node
     }
 
 
 type alias User =
     { uid : String
+    }
+
+
+type alias Node =
+    { id : String
+    , name : String
     }
 
 
@@ -78,6 +87,8 @@ init flags url key =
       , flags = flags
       , zone = Time.utc
       , time = Time.millisToPosix 0
+      , err = Nothing
+      , nodes = []
       }
     , initCmd flags
     )
@@ -116,7 +127,9 @@ type Msg
     | AdjustTimeZone Time.Zone
     | SignIn
     | SignOut
+    | ErrorParsingResponse String
     | QueryResponseReceived Json.Decode.Value
+    | NodesReceived (List Node)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -151,9 +164,54 @@ update msg model =
             )
 
         QueryResponseReceived response ->
-            ( model
+            update (decodeAndExtract response) model
+
+        ErrorParsingResponse err ->
+            ( { model | err = Just err }
             , Cmd.none
             )
+
+        NodesReceived nodes ->
+            ( { model | nodes = nodes }
+            , Cmd.none
+            )
+
+
+decodeAndExtract : Json.Decode.Value -> Msg
+decodeAndExtract response =
+    Json.Decode.decodeValue queryResponseDecoder response
+        |> Result.extract parseErrorToMessage
+
+
+parseErrorToMessage : Json.Decode.Error -> Msg
+parseErrorToMessage err =
+    ErrorParsingResponse (Json.Decode.errorToString err)
+
+
+queryResponseDecoder : Json.Decode.Decoder Msg
+queryResponseDecoder =
+    Query.snapshotDecoder |> Json.Decode.andThen snapshotToMessageDecoder
+
+
+snapshotToMessageDecoder : Query.Snapshot -> Json.Decode.Decoder Msg
+snapshotToMessageDecoder snapshot =
+    case snapshot.id of
+        "nodes" ->
+            nodeDecoder
+                |> Json.Decode.field "data"
+                |> Json.Decode.list
+                |> Json.Decode.field "docs"
+                |> Json.Decode.map NodesReceived
+
+        _ ->
+            Json.Decode.fail ("unknown query id: " ++ snapshot.id)
+
+
+nodeDecoder : Json.Decode.Decoder Node
+nodeDecoder =
+    Json.Decode.map2 Node
+        (field "id" Json.Decode.string)
+        (field "name" Json.Decode.string)
 
 
 
@@ -196,9 +254,33 @@ mainView model =
     , body =
         [ Element.layout [] <|
             Element.column []
-                [ Element.el [ alignRight ] signOutButton ]
+                [ Element.el [ alignRight ] signOutButton
+                , errView model.err
+                , nodesView model.nodes
+                ]
         ]
     }
+
+
+errView : Maybe String -> Element Msg
+errView maybeErr =
+    case maybeErr of
+        Nothing ->
+            Element.text "no error"
+
+        Just err ->
+            Element.text err
+
+
+nodesView : List Node -> Element Msg
+nodesView nodes =
+    Element.column []
+        (List.map nodeView nodes)
+
+
+nodeView : Node -> Element Msg
+nodeView node =
+    Element.text (node.id ++ " " ++ node.name)
 
 
 signInButton =

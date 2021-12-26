@@ -77,7 +77,22 @@
 
         var handle = q.onSnapshot((querySnapshot) => {
           console.log("snapshot", querySnapshot)
-          app.ports.queryResponseReceiver.send(querySnapshot)
+          var docs = []
+          querySnapshot.forEach((doc) => {
+            var data = doc.data()
+            data.id = doc.id
+            var item = {
+              "id": doc.id,
+              "data": data
+            }
+            docs.push(item)
+          })
+          snapshot = {
+            "id": query.id,
+            "docs": docs,
+          }
+          console.log("snapshot sent", snapshot)
+          app.ports.queryResponseReceiver.send(snapshot)
         })
         queryHandles[query.id] = handle
       });

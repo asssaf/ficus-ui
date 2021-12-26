@@ -20,14 +20,25 @@ type alias QueryPathElement =
 
 type alias Doc =
     { id : String
+    , data : Json.Decode.Value
     }
 
 
 type alias Snapshot =
-    { docs : List Doc
+    { id : String
+    , docs : List Doc
     }
 
 
-decodeSnapshot : Json.Decode.Value -> Snapshot
-decodeSnapshot v =
-    { docs = [] }
+snapshotDecoder : Json.Decode.Decoder Snapshot
+snapshotDecoder =
+    Json.Decode.map2 Snapshot
+        (field "id" Json.Decode.string)
+        (field "docs" (Json.Decode.list docDecoder))
+
+
+docDecoder : Json.Decode.Decoder Doc
+docDecoder =
+    Json.Decode.map2 Doc
+        (field "id" Json.Decode.string)
+        (field "data" Json.Decode.value)
