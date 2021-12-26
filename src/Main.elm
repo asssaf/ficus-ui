@@ -6,6 +6,8 @@ import Element exposing (..)
 import Element.Input as Input
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
+import Json.Decode exposing (Value)
+import Query exposing (..)
 import Task
 import Time
 import Url
@@ -36,10 +38,10 @@ port signIn : () -> Cmd msg
 port signOut : () -> Cmd msg
 
 
-port sendQuery : String -> Cmd msg
+port sendQuery : Query.Query -> Cmd msg
 
 
-port queryResponseReceiver : (String -> msg) -> Sub msg
+port queryResponseReceiver : (Json.Decode.Value -> msg) -> Sub msg
 
 
 
@@ -77,16 +79,31 @@ init flags url key =
       , zone = Time.utc
       , time = Time.millisToPosix 0
       }
-    , initCmd
+    , initCmd flags
     )
 
 
-initCmd : Cmd Msg
-initCmd =
-    Cmd.batch
-        [ Task.perform AdjustTimeZone Time.here
-        , sendQuery "hi"
-        ]
+initCmd : Flags -> Cmd Msg
+initCmd flags =
+    case flags.user of
+        Nothing ->
+            Cmd.batch
+                [ Task.perform AdjustTimeZone Time.here
+                ]
+
+        Just user ->
+            Cmd.batch
+                [ Task.perform AdjustTimeZone Time.here
+                , sendQuery nodeQuery
+                ]
+
+
+nodeQuery : Query.Query
+nodeQuery =
+    { id = "nodes"
+    , path = [ "nodes" ]
+    , limit = 10
+    }
 
 
 
@@ -99,8 +116,7 @@ type Msg
     | AdjustTimeZone Time.Zone
     | SignIn
     | SignOut
-    | Send
-    | Recv String
+    | QueryResponseReceived Json.Decode.Value
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -134,12 +150,7 @@ update msg model =
             , signOut ()
             )
 
-        Send ->
-            ( model
-            , sendQuery "hello"
-            )
-
-        Recv message ->
+        QueryResponseReceived response ->
             ( model
             , Cmd.none
             )
@@ -151,7 +162,7 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    queryResponseReceiver Recv
+    queryResponseReceiver QueryResponseReceived
 
 
 

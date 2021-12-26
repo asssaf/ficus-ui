@@ -51,8 +51,24 @@
       });
 
       app.ports.sendQuery.subscribe(function(query) {
-        var queryId = JSON.stringify(query)
-        console.log("query", queryId)
+        console.log("query", JSON.stringify(query))
+        var db = firebase.firestore();
+        var q = db
+        for (i = 0; i < query.path.length; i++) {
+          var pathElement = query.path[i]
+          if (i % 2 == 0) {
+            q = q.collection(pathElement)
+          } else {
+            q = q.doc(pathElement)
+          }
+        }
+
+        q = q.limit(query.limit)
+
+        q.onSnapshot((querySnapshot) => {
+          console.log("snapshot", querySnapshot)
+          app.ports.queryResponseReceiver.send(querySnapshot)
+        })
       });
     }
 
