@@ -1,0 +1,110 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Main</title>
+  <!--<link rel="stylesheet" href="whatever-you-want.css">-->
+  <link type="text/css" rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/4.8.0/firebase-ui-auth.css" />
+  <script src="https://www.gstatic.com/firebasejs/8.5.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.5.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.5.0/firebase-firestore.js"></script>
+  <script src="main.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="myapp"></div>
+  <script>
+    firebase.initializeApp({
+      apiKey: apiKey,
+      authDomain: authDomain,
+      projectId: projectId
+    });
+
+    var provider = new firebase.auth.GoogleAuthProvider();
+
+    signIn = function() {
+      firebase.auth().signInWithRedirect(provider)
+    }
+
+    signOut = function() {
+      firebase.auth().signOut().then(() => {
+        // Sign-out successful.
+      }).catch((error) => {
+        // An error happened.
+      });
+    }
+
+    start = function(user) {
+      var app = Elm.Main.init({
+        node: document.getElementById('myapp'),
+        flags: {
+          user: user
+        }
+      });
+
+      app.ports.signIn.subscribe(function(message) {
+        signIn();
+      });
+
+      app.ports.signOut.subscribe(function(message) {
+        signOut();
+      });
+
+      app.ports.sendQuery.subscribe(function(query) {
+        var queryId = JSON.stringify(query)
+        console.log("query", queryId)
+      });
+    }
+
+    initApp = function() {
+      firebase.auth().onAuthStateChanged(function(user) {
+        if (user) {
+          // User is signed in.
+          // var displayName = user.displayName;
+          // var email = user.email;
+          // var emailVerified = user.emailVerified;
+          // var uid = user.uid;
+          // var providerData = user.providerData;
+          // var providerId = providerData.providerId;
+          // var providerUid = providerData.uid;
+          user.getIdToken().then(function(accessToken) {
+            start(user)
+          })
+        } else {
+          start(user)
+        }
+      }, function(error) {
+        console.log(error);
+      });
+    };
+
+
+    doQuery = function(queryId, query, port, augmentItem, augmentResult) {
+      query.onSnapshot((querySnapshot) => {
+        var docs = []
+        querySnapshot.forEach((doc) => {
+          var data = doc.data()
+          var item = {
+            "id": doc.id,
+            "data": data
+          }
+          if (augmentItem) {
+            item = augmentItem(item, doc)
+          }
+          docs.push(item)
+        })
+        if (augmentResult) {
+          docs = augmentResult(docs)
+        }
+        console.log("query result " + queryId, JSON.stringify(docs))
+        port.send(docs)
+      })
+    }
+
+    window.addEventListener('load', function() {
+      initApp()
+    });
+
+  </script>
+</body>
+</html>
