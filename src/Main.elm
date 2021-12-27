@@ -62,6 +62,7 @@ type alias Model =
     , time : Time.Posix
     , err : Maybe String
     , nodes : List Node
+    , motors : List Motor
     }
 
 
@@ -73,6 +74,14 @@ type alias User =
 type alias Node =
     { id : String
     , name : String
+    }
+
+
+type alias Motor =
+    { id : String
+    , name : String
+    , typ : String
+    , enabled : Bool
     }
 
 
@@ -89,6 +98,7 @@ init flags url key =
       , time = Time.millisToPosix 0
       , err = Nothing
       , nodes = []
+      , motors = []
       }
     , initCmd flags
     )
@@ -106,6 +116,7 @@ initCmd flags =
             Cmd.batch
                 [ Task.perform AdjustTimeZone Time.here
                 , sendQuery nodeQuery
+                , sendQuery motorQuery
                 ]
 
 
@@ -114,6 +125,16 @@ nodeQuery =
     { id = "nodes"
     , path = [ "nodes" ]
     , limit = 10
+    , collectionGroup = False
+    }
+
+
+motorQuery : Query.Query
+motorQuery =
+    { id = "motors"
+    , path = [ "motors" ]
+    , limit = 10
+    , collectionGroup = True
     }
 
 
@@ -130,6 +151,7 @@ type Msg
     | ErrorParsingResponse String
     | QueryResponseReceived Json.Decode.Value
     | NodesReceived (List Node)
+    | MotorsReceived (List Motor)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -176,6 +198,11 @@ update msg model =
             , Cmd.none
             )
 
+        MotorsReceived motors ->
+            ( { model | motors = motors }
+            , Cmd.none
+            )
+
 
 decodeAndExtract : Json.Decode.Value -> Msg
 decodeAndExtract response =
@@ -203,6 +230,13 @@ snapshotToMessageDecoder snapshot =
                 |> Json.Decode.field "docs"
                 |> Json.Decode.map NodesReceived
 
+        "motors" ->
+            motorDecoder
+                |> Json.Decode.field "data"
+                |> Json.Decode.list
+                |> Json.Decode.field "docs"
+                |> Json.Decode.map MotorsReceived
+
         _ ->
             Json.Decode.fail ("unknown query id: " ++ snapshot.id)
 
@@ -212,6 +246,15 @@ nodeDecoder =
     Json.Decode.map2 Node
         (field "id" Json.Decode.string)
         (field "name" Json.Decode.string)
+
+
+motorDecoder : Json.Decode.Decoder Motor
+motorDecoder =
+    Json.Decode.map4 Motor
+        (field "id" Json.Decode.string)
+        (field "name" Json.Decode.string)
+        (field "type" Json.Decode.string)
+        (field "enabled" Json.Decode.bool)
 
 
 
@@ -257,6 +300,7 @@ mainView model =
                 [ Element.el [ alignRight ] signOutButton
                 , errView model.err
                 , nodesView model.nodes
+                , motorsView model.motors
                 ]
         ]
     }
@@ -281,6 +325,17 @@ nodesView nodes =
 nodeView : Node -> Element Msg
 nodeView node =
     Element.text (node.id ++ " " ++ node.name)
+
+
+motorsView : List Motor -> Element Msg
+motorsView motors =
+    Element.column []
+        (List.map motorView motors)
+
+
+motorView : Motor -> Element Msg
+motorView motor =
+    Element.text (motor.id ++ " " ++ motor.name)
 
 
 signInButton =

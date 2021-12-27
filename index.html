@@ -44,6 +44,9 @@
         }
       });
 
+      var db = firebase.firestore();
+      db.useEmulator("localhost", 38080)
+
       app.ports.signIn.subscribe(function(message) {
         signIn();
       });
@@ -61,15 +64,19 @@
           prevHandle()
         }
 
-        var db = firebase.firestore();
-        db.useEmulator("localhost", 38080)
         var q = db
-        for (i = 0; i < query.path.length; i++) {
-          var pathElement = query.path[i]
-          if (i % 2 == 0) {
-            q = q.collection(pathElement)
-          } else {
-            q = q.doc(pathElement)
+
+        if (query.collectionGroup) {
+          q = q.collectionGroup(query.path[0])
+
+        } else {
+          for (i = 0; i < query.path.length; i++) {
+            var pathElement = query.path[i]
+            if (i % 2 == 0) {
+              q = q.collection(pathElement)
+            } else {
+              q = q.doc(pathElement)
+            }
           }
         }
 
