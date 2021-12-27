@@ -6,6 +6,7 @@ import Json.Decode exposing (..)
 type alias Query =
     { id : String
     , path : QueryPath
+    , orderBy : Maybe OrderBy
     , limit : Int
     , collectionGroup : Bool
     }
@@ -17,6 +18,12 @@ type alias QueryPath =
 
 type alias QueryPathElement =
     String
+
+
+type alias OrderBy =
+    { field : String
+    , dir : String
+    }
 
 
 type alias Doc =

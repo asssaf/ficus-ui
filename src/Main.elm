@@ -2,6 +2,8 @@ port module Main exposing (..)
 
 import Browser
 import Browser.Navigation as Nav
+import DateUtil exposing (..)
+import Dict exposing (Dict)
 import Element exposing (..)
 import Element.Input as Input
 import Html exposing (Html, button, div, text)
@@ -63,6 +65,7 @@ type alias Model =
     , err : Maybe String
     , nodes : List Node
     , motors : List Motor
+    , lastWaterGivens : Dict String WaterGiven
     }
 
 
@@ -79,14 +82,23 @@ type alias Node =
 
 type alias Motor =
     { id : String
+    , nodeID : String
     , name : String
     , typ : String
     , enabled : Bool
     }
 
 
-type alias Query =
-    Int
+type alias MotorInfo =
+    { motor : Motor
+    , lastWaterGiven : Maybe WaterGiven
+    }
+
+
+type alias WaterGiven =
+    { seconds : Int
+    , start : Time.Posix
+    }
 
 
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -99,6 +111,7 @@ init flags url key =
       , err = Nothing
       , nodes = []
       , motors = []
+      , lastWaterGivens = Dict.empty
       }
     , initCmd flags
     )
@@ -124,6 +137,7 @@ nodeQuery : Query.Query
 nodeQuery =
     { id = "nodes"
     , path = [ "nodes" ]
+    , orderBy = Nothing
     , limit = 10
     , collectionGroup = False
     }
@@ -133,9 +147,29 @@ motorQuery : Query.Query
 motorQuery =
     { id = "motors"
     , path = [ "motors" ]
+    , orderBy = Nothing
     , limit = 10
     , collectionGroup = True
     }
+
+
+lastDoneByDayQuery : String -> String -> Query.Query
+lastDoneByDayQuery nodeID motorID =
+    { id = "nodes/" ++ nodeID ++ "/motors/" ++ motorID ++ "/done-by-day/last"
+    , path = [ "nodes", nodeID, "motors", motorID, "done-by-day" ]
+    , orderBy = Just { field = "start", dir = "desc" }
+    , limit = 1
+    , collectionGroup = False
+    }
+
+
+queryForMotor : Motor -> Query.Query
+queryForMotor motor =
+    lastDoneByDayQuery motor.nodeID motor.id
+
+
+queriesForMotors =
+    List.map queryForMotor
 
 
 
@@ -145,6 +179,7 @@ motorQuery =
 type Msg
     = LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
+    | Tick Time.Posix
     | AdjustTimeZone Time.Zone
     | SignIn
     | SignOut
@@ -152,6 +187,7 @@ type Msg
     | QueryResponseReceived Json.Decode.Value
     | NodesReceived (List Node)
     | MotorsReceived (List Motor)
+    | LastWaterGivenReceived String (Maybe WaterGiven)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -167,6 +203,11 @@ update msg model =
 
         UrlChanged url ->
             ( { model | url = url }
+            , Cmd.none
+            )
+
+        Tick newTime ->
+            ( { model | time = newTime }
             , Cmd.none
             )
 
@@ -200,6 +241,11 @@ update msg model =
 
         MotorsReceived motors ->
             ( { model | motors = motors }
+            , Cmd.batch (List.map sendQuery (queriesForMotors motors))
+            )
+
+        LastWaterGivenReceived motorID maybeWaterGiven ->
+            ( { model | lastWaterGivens = Dict.update motorID (\v -> maybeWaterGiven) model.lastWaterGivens }
             , Cmd.none
             )
 
@@ -222,23 +268,37 @@ queryResponseDecoder =
 
 snapshotToMessageDecoder : Query.Snapshot -> Json.Decode.Decoder Msg
 snapshotToMessageDecoder snapshot =
-    case snapshot.id of
-        "nodes" ->
+    case queryIDToSegments snapshot.id of
+        [ "nodes" ] ->
             nodeDecoder
                 |> Json.Decode.field "data"
                 |> Json.Decode.list
                 |> Json.Decode.field "docs"
                 |> Json.Decode.map NodesReceived
 
-        "motors" ->
+        [ "motors" ] ->
             motorDecoder
                 |> Json.Decode.field "data"
                 |> Json.Decode.list
                 |> Json.Decode.field "docs"
                 |> Json.Decode.map MotorsReceived
 
+        [ "nodes", nodeID, "motors", motorID, "done-by-day", "last" ] ->
+            waterGivenDecoder
+                |> Json.Decode.field "data"
+                |> Json.Decode.list
+                |> Json.Decode.field "docs"
+                |> Json.Decode.map List.head
+                |> Json.Decode.map (LastWaterGivenReceived motorID)
+
         _ ->
             Json.Decode.fail ("unknown query id: " ++ snapshot.id)
+
+
+queryIDToSegments : String -> List String
+queryIDToSegments id =
+    String.split "/" id
+        |> List.filter (\s -> s /= "")
 
 
 nodeDecoder : Json.Decode.Decoder Node
@@ -250,11 +310,25 @@ nodeDecoder =
 
 motorDecoder : Json.Decode.Decoder Motor
 motorDecoder =
-    Json.Decode.map4 Motor
+    Json.Decode.map5 Motor
         (field "id" Json.Decode.string)
+        (field "parentID" Json.Decode.string)
         (field "name" Json.Decode.string)
         (field "type" Json.Decode.string)
         (field "enabled" Json.Decode.bool)
+
+
+waterGivenDecoder : Json.Decode.Decoder WaterGiven
+waterGivenDecoder =
+    Json.Decode.map2 WaterGiven
+        (field "done" Json.Decode.int)
+        (field "start" posixDecoder)
+
+
+posixDecoder : Json.Decode.Decoder Time.Posix
+posixDecoder =
+    Json.Decode.int
+        |> Json.Decode.map (\s -> Time.millisToPosix (s * 1000))
 
 
 
@@ -263,7 +337,10 @@ motorDecoder =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    queryResponseReceiver QueryResponseReceived
+    Sub.batch
+        [ Time.every 1000 Tick
+        , queryResponseReceiver QueryResponseReceived
+        ]
 
 
 
@@ -300,10 +377,15 @@ mainView model =
                 [ Element.el [ alignRight ] signOutButton
                 , errView model.err
                 , nodesView model.nodes
-                , motorsView model.motors
+                , motorsView model.zone model.time (modelToMotorInfos model)
                 ]
         ]
     }
+
+
+modelToMotorInfos : Model -> List MotorInfo
+modelToMotorInfos model =
+    List.map (\m -> { motor = m, lastWaterGiven = Dict.get m.id model.lastWaterGivens }) model.motors
 
 
 errView : Maybe String -> Element Msg
@@ -327,15 +409,36 @@ nodeView node =
     Element.text (node.id ++ " " ++ node.name)
 
 
-motorsView : List Motor -> Element Msg
-motorsView motors =
+motorsView : Time.Zone -> Time.Posix -> List MotorInfo -> Element Msg
+motorsView zone time motorInfos =
+    Element.column [] <|
+        List.map (motorView zone time) motorInfos
+
+
+motorView : Time.Zone -> Time.Posix -> MotorInfo -> Element Msg
+motorView zone time motorInfo =
     Element.column []
-        (List.map motorView motors)
+        [ Element.text motorInfo.motor.name
+        , motorLastWateredLabel zone time motorInfo.lastWaterGiven
+        ]
 
 
-motorView : Motor -> Element Msg
-motorView motor =
-    Element.text (motor.id ++ " " ++ motor.name)
+motorLastWateredLabel : Time.Zone -> Time.Posix -> Maybe WaterGiven -> Element Msg
+motorLastWateredLabel zone time maybeWaterGiven =
+    Element.text
+        ("Last watered: "
+            ++ formatWaterGiven zone time maybeWaterGiven
+        )
+
+
+formatWaterGiven : Time.Zone -> Time.Posix -> Maybe WaterGiven -> String
+formatWaterGiven zone time maybeWaterGiven =
+    case maybeWaterGiven of
+        Nothing ->
+            "Never"
+
+        Just waterGiven ->
+            DateUtil.daysSinceHumane zone time waterGiven.start ++ " for " ++ String.fromInt waterGiven.seconds ++ " seconds"
 
 
 signInButton =

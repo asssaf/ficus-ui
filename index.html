@@ -80,6 +80,10 @@
           }
         }
 
+        if (query.orderBy) {
+          q = q.orderBy(query.orderBy.field, query.orderBy.dir)
+        }
+
         q = q.limit(query.limit)
 
         var handle = q.onSnapshot((querySnapshot) => {
@@ -88,6 +92,10 @@
           querySnapshot.forEach((doc) => {
             var data = doc.data()
             data.id = doc.id
+            data.path = doc.ref.path
+            if (doc.ref.parent && doc.ref.parent.parent) {
+              data.parentID = doc.ref.parent.parent.id
+            }
             var item = {
               "id": doc.id,
               "data": data
