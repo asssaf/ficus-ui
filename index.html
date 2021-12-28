@@ -92,29 +92,52 @@
           q = q.limit(query.limit)
         }
 
-        var handle = q.onSnapshot((querySnapshot) => {
-          console.log("snapshot", querySnapshot)
-          var docs = []
-          querySnapshot.forEach((doc) => {
-            var data = doc.data()
-            data.id = doc.id
-            data.path = doc.ref.path
-            if (doc.ref.parent && doc.ref.parent.parent) {
-              data.parentID = doc.ref.parent.parent.id
-            }
-            var item = {
-              "id": doc.id,
-              "data": data
-            }
-            docs.push(item)
-          })
-          snapshot = {
-            "id": query.id,
-            "docs": docs,
+        docToItem = (doc) => {
+          var data = doc.data()
+          data.id = doc.id
+          data.path = doc.ref.path
+          if (doc.ref.parent && doc.ref.parent.parent) {
+            data.parentID = doc.ref.parent.parent.id
           }
-          console.log("snapshot sent", snapshot)
-          app.ports.queryResponseReceiver.send(snapshot)
-        })
+          var item = {
+            "id": doc.id,
+            "data": data,
+          }
+
+          return item
+        }
+
+        var snapshotHandler
+        if (query.path.length % 2 == 1) {
+          snapshotHandler = (querySnapshot) => {
+            console.log("snapshot", querySnapshot)
+            var docs = []
+            querySnapshot.forEach((doc) => {
+              item = docToItem(doc)
+              docs.push(item)
+            })
+            snapshot = {
+              "id": query.id,
+              "docs": docs,
+            }
+            console.log("query result sent", JSON.stringify(snapshot))
+            app.ports.queryResponseReceiver.send(snapshot)
+          }
+
+        } else {
+          snapshotHandler = (doc) => {
+            console.log("doc", doc)
+            item = docToItem(doc)
+            var snapshot = {
+              "id": query.id,
+              "docs": [ item ],
+            }
+            console.log("query result sent", JSON.stringify(snapshot))
+            app.ports.queryResponseReceiver.send(snapshot)
+          }
+        }
+
+        var handle = q.onSnapshot(snapshotHandler, (error) => console.log("error in listener", query.id, error))
         queryHandles[query.id] = handle
       });
     }
@@ -141,31 +164,12 @@
       });
     };
 
-
-    doQuery = function(queryId, query, port, augmentItem, augmentResult) {
-      query.onSnapshot((querySnapshot) => {
-        var docs = []
-        querySnapshot.forEach((doc) => {
-          var data = doc.data()
-          var item = {
-            "id": doc.id,
-            "data": data
-          }
-          if (augmentItem) {
-            item = augmentItem(item, doc)
-          }
-          docs.push(item)
-        })
-        if (augmentResult) {
-          docs = augmentResult(docs)
-        }
-        console.log("query result " + queryId, JSON.stringify(docs))
-        port.send(docs)
-      })
-    }
-
     window.addEventListener('load', function() {
       initApp()
+    });
+
+    window.addEventListener('visibilitychange', function() {
+      console.log("visibility change", document.visibilityState)
     });
 
   </script>
