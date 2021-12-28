@@ -11,8 +11,8 @@ daysSince zone currentTime olderTime =
         (Date.fromPosix zone currentTime)
 
 
-daysSinceHumane : Time.Zone -> Time.Posix -> Time.Posix -> String
-daysSinceHumane zone currentTime olderTime =
+humaneTimeSince : Time.Zone -> Time.Posix -> Time.Posix -> String
+humaneTimeSince zone currentTime olderTime =
     let
         days =
             daysSince zone currentTime olderTime

@@ -69,6 +69,7 @@ type alias Model =
     , nodes : List Node
     , motors : List Motor
     , lastWaterGivens : Dict String WaterGiven
+    , lastSensorReadings : Dict String SensorReading
     }
 
 
@@ -89,18 +90,26 @@ type alias Motor =
     , name : String
     , typ : String
     , enabled : Bool
+    , triggerSensorId : String
     }
 
 
 type alias PlantInfo =
     { motor : Motor
     , lastWaterGiven : Maybe WaterGiven
+    , lastSensorReading : Maybe SensorReading
     }
 
 
 type alias WaterGiven =
     { seconds : Int
     , start : Time.Posix
+    }
+
+
+type alias SensorReading =
+    { value : Int
+    , timestamp : Time.Posix
     }
 
 
@@ -115,6 +124,7 @@ init flags url key =
       , nodes = []
       , motors = []
       , lastWaterGivens = Dict.empty
+      , lastSensorReadings = Dict.empty
       }
     , initCmd flags
     )
@@ -141,7 +151,7 @@ nodeQuery =
     { id = "nodes"
     , path = [ "nodes" ]
     , orderBy = Nothing
-    , limit = 10
+    , limit = Just 10
     , collectionGroup = False
     }
 
@@ -151,7 +161,7 @@ motorQuery =
     { id = "motors"
     , path = [ "motors" ]
     , orderBy = Nothing
-    , limit = 10
+    , limit = Just 10
     , collectionGroup = True
     }
 
@@ -161,18 +171,31 @@ lastDoneByDayQuery nodeID motorID =
     { id = "nodes/" ++ nodeID ++ "/motors/" ++ motorID ++ "/done-by-day/last"
     , path = [ "nodes", nodeID, "motors", motorID, "done-by-day" ]
     , orderBy = Just { field = "start", dir = "desc" }
-    , limit = 1
+    , limit = Just 1
     , collectionGroup = False
     }
 
 
-queryForMotor : Motor -> Query.Query
+lastSensorReadingQuery : String -> String -> Query.Query
+lastSensorReadingQuery nodeID sensorID =
+    { id = "nodes/" ++ nodeID ++ "/sensors/" ++ sensorID ++ "/readings/last"
+    , path = [ "nodes", nodeID, "sensors", sensorID, "readings" ]
+    , orderBy = Just { field = "timestamp", dir = "desc" }
+    , limit = Just 1
+    , collectionGroup = False
+    }
+
+
+queryForMotor : Motor -> List Query.Query
 queryForMotor motor =
-    lastDoneByDayQuery motor.nodeID motor.id
+    [ lastDoneByDayQuery motor.nodeID motor.id
+    , lastSensorReadingQuery motor.nodeID motor.triggerSensorId
+    ]
 
 
-queriesForMotors =
-    List.map queryForMotor
+queriesForMotors : List Motor -> List Query.Query
+queriesForMotors motors =
+    List.concat (List.map queryForMotor motors)
 
 
 
@@ -191,6 +214,7 @@ type Msg
     | NodesReceived (List Node)
     | MotorsReceived (List Motor)
     | LastWaterGivenReceived String (Maybe WaterGiven)
+    | LastSensorReadingReceived String (Maybe SensorReading)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -252,6 +276,11 @@ update msg model =
             , Cmd.none
             )
 
+        LastSensorReadingReceived sensorID maybeSensorReading ->
+            ( { model | lastSensorReadings = Dict.update sensorID (\v -> maybeSensorReading) model.lastSensorReadings }
+            , Cmd.none
+            )
+
 
 decodeAndExtract : Json.Decode.Value -> Msg
 decodeAndExtract response =
@@ -294,6 +323,14 @@ snapshotToMessageDecoder snapshot =
                 |> Json.Decode.map List.head
                 |> Json.Decode.map (LastWaterGivenReceived motorID)
 
+        [ "nodes", nodeID, "sensors", sensorID, "readings", "last" ] ->
+            sensorReadingDecoder
+                |> Json.Decode.field "data"
+                |> Json.Decode.list
+                |> Json.Decode.field "docs"
+                |> Json.Decode.map List.head
+                |> Json.Decode.map (LastSensorReadingReceived sensorID)
+
         _ ->
             Json.Decode.fail ("unknown query id: " ++ snapshot.id)
 
@@ -313,12 +350,13 @@ nodeDecoder =
 
 motorDecoder : Json.Decode.Decoder Motor
 motorDecoder =
-    Json.Decode.map5 Motor
+    Json.Decode.map6 Motor
         (field "id" Json.Decode.string)
         (field "parentID" Json.Decode.string)
         (field "name" Json.Decode.string)
         (field "type" Json.Decode.string)
         (field "enabled" Json.Decode.bool)
+        (field "triggerSensorId" Json.Decode.string)
 
 
 waterGivenDecoder : Json.Decode.Decoder WaterGiven
@@ -326,6 +364,13 @@ waterGivenDecoder =
     Json.Decode.map2 WaterGiven
         (field "done" Json.Decode.int)
         (field "start" posixDecoder)
+
+
+sensorReadingDecoder : Json.Decode.Decoder SensorReading
+sensorReadingDecoder =
+    Json.Decode.map2 SensorReading
+        (field "moisture" Json.Decode.int)
+        (field "timestamp" posixDecoder)
 
 
 posixDecoder : Json.Decode.Decoder Time.Posix
@@ -388,7 +433,14 @@ mainView model =
 
 modelToPlantInfos : Model -> List PlantInfo
 modelToPlantInfos model =
-    List.map (\m -> { motor = m, lastWaterGiven = Dict.get m.id model.lastWaterGivens }) model.motors
+    List.map (\motor -> motorToPlantInfo motor model) model.motors
+
+
+motorToPlantInfo motor model =
+    { motor = motor
+    , lastWaterGiven = Dict.get motor.id model.lastWaterGivens
+    , lastSensorReading = Dict.get motor.triggerSensorId model.lastSensorReadings
+    }
 
 
 errView : Maybe String -> Element Msg
@@ -428,8 +480,9 @@ plantView zone time plantInfo =
         , spacing 10
         , width fill
         ]
-        [ Element.el [ Font.bold ] (Element.text plantInfo.motor.name)
+        [ Element.el [ Font.bold ] (Element.text (plantInfo.motor.name ++ " | " ++ plantInfo.motor.nodeID))
         , motorLastWateredLabel zone time plantInfo.lastWaterGiven
+        , Element.text ("Last reading: " ++ formatSensorReading zone time plantInfo.lastSensorReading)
         ]
 
 
@@ -448,7 +501,17 @@ formatWaterGiven zone time maybeWaterGiven =
             "Never"
 
         Just waterGiven ->
-            DateUtil.daysSinceHumane zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
+            DateUtil.humaneTimeSince zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
+
+
+formatSensorReading : Time.Zone -> Time.Posix -> Maybe SensorReading -> String
+formatSensorReading zone time maybeSensorReading =
+    case maybeSensorReading of
+        Nothing ->
+            "missing"
+
+        Just sensorReading ->
+            String.fromInt sensorReading.value ++ " (" ++ humaneTimeSince zone time sensorReading.timestamp ++ ")"
 
 
 signInButton =

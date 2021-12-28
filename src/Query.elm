@@ -7,7 +7,7 @@ type alias Query =
     { id : String
     , path : QueryPath
     , orderBy : Maybe OrderBy
-    , limit : Int
+    , limit : Maybe Int
     , collectionGroup : Bool
     }
 
