@@ -45,7 +45,11 @@
       });
 
       var db = firebase.firestore();
-      db.useEmulator("localhost", 38080)
+
+      const params = new URLSearchParams(window.location.search)
+      if (params.has('emulator')) {
+        db.useEmulator("localhost", 38080)
+      }
 
       app.ports.signIn.subscribe(function(message) {
         signIn();
