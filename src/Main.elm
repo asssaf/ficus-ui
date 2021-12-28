@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 import Browser
+import Browser.Events
 import Browser.Navigation as Nav
 import DateUtil exposing (..)
 import Dict exposing (Dict)
@@ -56,6 +57,8 @@ port queryResponseReceiver : (Json.Decode.Value -> msg) -> Sub msg
 
 type alias Flags =
     { user : Maybe User
+    , width : Int
+    , height : Int
     }
 
 
@@ -227,6 +230,7 @@ type Msg
     | UrlChanged Url.Url
     | Tick Time.Posix
     | AdjustTimeZone Time.Zone
+    | Resized Int Int
     | SignIn
     | SignOut
     | ErrorParsingResponse String
@@ -261,6 +265,11 @@ update msg model =
 
         AdjustTimeZone newZone ->
             ( { model | zone = newZone }
+            , Cmd.none
+            )
+
+        Resized w h ->
+            ( { model | flags = setSize w h model.flags }
             , Cmd.none
             )
 
@@ -306,6 +315,11 @@ update msg model =
             ( { model | lastSensorReadings = Dict.update sensorID (\v -> maybeSensorReading) model.lastSensorReadings }
             , Cmd.none
             )
+
+
+setSize : Int -> Int -> Flags -> Flags
+setSize w h flags =
+    { flags | width = w, height = h }
 
 
 decodeAndExtract : Json.Decode.Value -> Msg
@@ -428,6 +442,7 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ Time.every 1000 Tick
+        , Browser.Events.onResize (\w h -> Resized w h)
         , queryResponseReceiver QueryResponseReceived
         ]
 
@@ -461,8 +476,8 @@ mainView : Model -> Browser.Document Msg
 mainView model =
     { title = "Ficus"
     , body =
-        [ Element.layout [] <|
-            Element.column []
+        [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
+            Element.column [ width fill, height fill ]
                 [ Element.el [ alignRight ] signOutButton
                 , errView model.err
                 , nodesView model.nodes
@@ -508,23 +523,89 @@ nodeView node =
 
 plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
 plantsView zone time plantInfos =
-    Element.column [ padding 10, spacing 20 ] <|
+    Element.column [ padding 10, spacing 20, width fill, height fill ] <|
         List.map (plantView zone time) plantInfos
+
+
+tileBGColor =
+    rgb255 171 211 246
 
 
 plantView : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
 plantView zone time plantInfo =
     Element.column
-        [ Background.color (rgb255 171 211 246)
+        [ Background.color tileBGColor
         , Font.color (rgb255 0 0 0)
         , Border.rounded 10
-        , padding 10
+        , padding 20
         , spacing 10
         , width fill
         ]
-        [ Element.el [ Font.bold ] (Element.text (plantInfo.motor.name ++ " | " ++ plantInfo.motor.nodeID))
-        , motorLastWateredLabel zone time plantInfo.lastWaterGiven
+        [ plantViewHeader plantInfo
+        , plantViewBody zone time plantInfo
+        ]
+
+
+plantViewHeader : PlantInfo -> Element Msg
+plantViewHeader plantInfo =
+    Element.el [ Font.bold ] (Element.text (plantInfo.motor.name ++ " | " ++ plantInfo.motor.nodeID))
+
+
+plantViewBody : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
+plantViewBody zone time plantInfo =
+    Element.row [ spacing 30, width fill ]
+        [ Element.el [ width (fillPortion 7), height fill ] <| plantViewBodyLeft zone time plantInfo
+        , Element.el [ width (fillPortion 3), height fill ] <| plantViewBodyRight zone time plantInfo
+        ]
+
+
+plantViewBodyLeft : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
+plantViewBodyLeft zone time plantInfo =
+    Element.column [ spacing 5 ]
+        [ motorLastWateredLabel zone time plantInfo.lastWaterGiven
         , Element.text ("Last reading: " ++ formatSensorReading zone time plantInfo.sensor plantInfo.lastSensorReading)
+        ]
+
+
+plantViewBodyRight : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
+plantViewBodyRight zone time plantInfo =
+    case Maybe.map2 readingToPercent plantInfo.sensor plantInfo.lastSensorReading of
+        Nothing ->
+            moistureBar 0 ""
+
+        Just percent ->
+            moistureBar percent (String.fromInt percent ++ "%")
+
+
+readingToPercent : Sensor -> SensorReading -> Int
+readingToPercent s r =
+    clamp 0 100 <|
+        100
+            * (r.value - s.min)
+            // (s.max - s.min)
+
+
+moistureBar : Int -> String -> Element Msg
+moistureBar percent title =
+    Element.row [ width fill, height (fill |> minimum 100) ]
+        [ Element.el
+            [ width (fill |> maximum 100)
+            , height fill
+            , alignRight
+            , centerY
+            , Border.width 1
+            , Background.gradient { angle = 0, steps = [ rgb255 91 58 0, rgb255 20 203 0 ] }
+            , behindContent (partialBar percent tileBGColor)
+            ]
+            (Element.el [ centerX, centerY ] (Element.text (String.fromInt percent ++ "%")))
+        ]
+
+
+partialBar : Int -> Color -> Element Msg
+partialBar percent backgroundColor =
+    Element.column [ width fill, height fill ]
+        [ Element.el [ width fill, height (fillPortion (100 - percent)), Background.color backgroundColor ] Element.none
+        , Element.el [ width fill, height (fillPortion percent) ] Element.none
         ]
 
 
