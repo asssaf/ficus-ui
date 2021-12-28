@@ -89,7 +89,7 @@ type alias Motor =
     }
 
 
-type alias MotorInfo =
+type alias PlantInfo =
     { motor : Motor
     , lastWaterGiven : Maybe WaterGiven
     }
@@ -377,14 +377,14 @@ mainView model =
                 [ Element.el [ alignRight ] signOutButton
                 , errView model.err
                 , nodesView model.nodes
-                , motorsView model.zone model.time (modelToMotorInfos model)
+                , plantsView model.zone model.time (modelToPlantInfos model)
                 ]
         ]
     }
 
 
-modelToMotorInfos : Model -> List MotorInfo
-modelToMotorInfos model =
+modelToPlantInfos : Model -> List PlantInfo
+modelToPlantInfos model =
     List.map (\m -> { motor = m, lastWaterGiven = Dict.get m.id model.lastWaterGivens }) model.motors
 
 
@@ -409,17 +409,17 @@ nodeView node =
     Element.text (node.id ++ " " ++ node.name)
 
 
-motorsView : Time.Zone -> Time.Posix -> List MotorInfo -> Element Msg
-motorsView zone time motorInfos =
+plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
+plantsView zone time plantInfos =
     Element.column [] <|
-        List.map (motorView zone time) motorInfos
+        List.map (plantView zone time) plantInfos
 
 
-motorView : Time.Zone -> Time.Posix -> MotorInfo -> Element Msg
-motorView zone time motorInfo =
+plantView : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
+plantView zone time plantInfo =
     Element.column []
-        [ Element.text motorInfo.motor.name
-        , motorLastWateredLabel zone time motorInfo.lastWaterGiven
+        [ Element.text plantInfo.motor.name
+        , motorLastWateredLabel zone time plantInfo.lastWaterGiven
         ]
 
 
