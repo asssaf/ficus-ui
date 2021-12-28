@@ -5,6 +5,9 @@ import Browser.Navigation as Nav
 import DateUtil exposing (..)
 import Dict exposing (Dict)
 import Element exposing (..)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
@@ -411,14 +414,21 @@ nodeView node =
 
 plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
 plantsView zone time plantInfos =
-    Element.column [] <|
+    Element.column [ padding 10, spacing 20 ] <|
         List.map (plantView zone time) plantInfos
 
 
 plantView : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
 plantView zone time plantInfo =
-    Element.column []
-        [ Element.text plantInfo.motor.name
+    Element.column
+        [ Background.color (rgb255 171 211 246)
+        , Font.color (rgb255 0 0 0)
+        , Border.rounded 10
+        , padding 10
+        , spacing 10
+        , width fill
+        ]
+        [ Element.el [ Font.bold ] (Element.text plantInfo.motor.name)
         , motorLastWateredLabel zone time plantInfo.lastWaterGiven
         ]
 
@@ -438,7 +448,7 @@ formatWaterGiven zone time maybeWaterGiven =
             "Never"
 
         Just waterGiven ->
-            DateUtil.daysSinceHumane zone time waterGiven.start ++ " for " ++ String.fromInt waterGiven.seconds ++ " seconds"
+            DateUtil.daysSinceHumane zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
 
 
 signInButton =

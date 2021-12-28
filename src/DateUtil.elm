@@ -25,3 +25,24 @@ daysSinceHumane zone currentTime olderTime =
         String.fromInt days ++ " days ago"
     else
         String.fromInt (days // 7) ++ " weeks ago"
+
+
+durationConcise : Int -> String
+durationConcise seconds =
+    if seconds < 60 then
+        String.fromInt seconds ++ "s"
+    else
+        let
+            minutes =
+                seconds // 60
+
+            remainingSeconds =
+                seconds - (minutes * 60)
+
+            minutesPart =
+                String.fromInt minutes ++ "m"
+        in
+        if remainingSeconds == 0 then
+            minutesPart
+        else
+            minutesPart ++ " " ++ durationConcise remainingSeconds
