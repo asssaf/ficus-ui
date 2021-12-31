@@ -25,14 +25,22 @@
     var queryHandles = {}
 
     signIn = function() {
-      firebase.auth().signInWithRedirect(provider)
+      firebase.auth().signInWithRedirect(provider).then(() => {
+        // sign in successful
+        console.log("signed in")
+      }).catch((error) => {
+        // An error happened.
+        console.log("error in signInWithRedirect", error)
+      });
     }
 
     signOut = function() {
       firebase.auth().signOut().then(() => {
         // Sign-out successful.
+        console.log("signed out")
       }).catch((error) => {
         // An error happened.
+        console.log("error in signOut", error)
       });
     }
 
@@ -157,14 +165,25 @@
           // var providerData = user.providerData;
           // var providerId = providerData.providerId;
           // var providerUid = providerData.uid;
+
           user.getIdToken().then(function(accessToken) {
+            console.log("logged in")
             start(user)
-          })
+          }).catch((error) => {
+            console.log("error in getIdToken()", error)
+          });
         } else {
+          console.log("logged out")
           start(user)
         }
       }, function(error) {
-        console.log(error);
+        console.log("error in onAuthStateChanged", error);
+      });
+
+      firebase.auth().onIdTokenChanged(function(user) {
+        console.log("id token changed", user)
+      }, function(error) {
+        console.log("error in onIdTokenChanged", error);
       });
     };
 
