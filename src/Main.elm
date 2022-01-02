@@ -465,9 +465,9 @@ loginView : Model -> Browser.Document Msg
 loginView model =
     { title = "Ficus"
     , body =
-        [ Element.layout [] <|
-            Element.column []
-                [ Element.el [ alignRight ] signInButton ]
+        [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
+            Element.column [ width fill, height fill ]
+                [ Element.el [ width fill, height (px 200) ] signInButton ]
         ]
     }
 
@@ -478,13 +478,26 @@ mainView model =
     , body =
         [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
             Element.column [ width fill, height fill ]
-                [ Element.el [ alignRight ] signOutButton
+                [ headerView
                 , errView model.err
                 , nodesView model.nodes
                 , plantsView model.zone model.time (modelToPlantInfos model)
                 ]
         ]
     }
+
+
+headerView : Element Msg
+headerView =
+    Element.row
+        [ padding 10
+        , width fill
+        , Font.color lightBlue
+        , Background.color (rgb255 66 135 245)
+        ]
+        [ Element.el [ alignLeft ] (Element.text "Ficus")
+        , Element.el [ alignRight ] signOutButton
+        ]
 
 
 modelToPlantInfos : Model -> List PlantInfo
@@ -527,8 +540,12 @@ plantsView zone time plantInfos =
         List.map (plantView zone time) plantInfos
 
 
-tileBGColor =
+lightBlue =
     rgb255 171 211 246
+
+
+tileBGColor =
+    lightBlue
 
 
 plantView : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
@@ -539,7 +556,8 @@ plantView zone time plantInfo =
         , Border.rounded 10
         , padding 20
         , spacing 10
-        , width fill
+        , width (fill |> minimum 250 |> maximum 800)
+        , centerX
         ]
         [ plantViewHeader plantInfo
         , plantViewBody zone time plantInfo
@@ -563,7 +581,7 @@ plantViewBodyLeft : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
 plantViewBodyLeft zone time plantInfo =
     Element.column [ spacing 5 ]
         [ motorLastWateredLabel zone time plantInfo.lastWaterGiven
-        , Element.text ("Last reading: " ++ formatSensorReading zone time plantInfo.sensor plantInfo.lastSensorReading)
+        , lastReadingLabel zone time plantInfo.sensor plantInfo.lastSensorReading
         ]
 
 
@@ -611,10 +629,10 @@ partialBar percent backgroundColor =
 
 motorLastWateredLabel : Time.Zone -> Time.Posix -> Maybe WaterGiven -> Element Msg
 motorLastWateredLabel zone time maybeWaterGiven =
-    Element.text
-        ("Last watered: "
-            ++ formatWaterGiven zone time maybeWaterGiven
-        )
+    Element.paragraph []
+        [ Element.text "Last watered: "
+        , Element.text (formatWaterGiven zone time maybeWaterGiven)
+        ]
 
 
 formatWaterGiven : Time.Zone -> Time.Posix -> Maybe WaterGiven -> String
@@ -625,6 +643,14 @@ formatWaterGiven zone time maybeWaterGiven =
 
         Just waterGiven ->
             DateUtil.humaneTimeSince zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
+
+
+lastReadingLabel : Time.Zone -> Time.Posix -> Maybe Sensor -> Maybe SensorReading -> Element Msg
+lastReadingLabel zone time maybeSensor maybeSensorReading =
+    Element.paragraph []
+        [ Element.text "Last reading: "
+        , Element.text (formatSensorReading zone time maybeSensor maybeSensorReading)
+        ]
 
 
 formatSensorReading : Time.Zone -> Time.Posix -> Maybe Sensor -> Maybe SensorReading -> String
@@ -649,7 +675,7 @@ formatSensorReading2 maybeSensor sensorReading =
 
 signInButton =
     Input.button
-        []
+        [ centerX, centerY ]
         { label = Element.text "Sign In"
         , onPress = Just SignIn
         }
