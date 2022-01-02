@@ -20,18 +20,34 @@
       projectId: projectId
     });
 
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('emulator')) {
+      auth.useEmulator("http://localhost:9099");
+      db.useEmulator("localhost", 38080)
+    }
+
     var provider = new firebase.auth.GoogleAuthProvider();
 
     var queryHandles = {}
 
     signIn = function() {
-      firebase.auth().signInWithRedirect(provider).then(() => {
-        // sign in successful
-        console.log("signed in")
-      }).catch((error) => {
-        // An error happened.
-        console.log("error in signInWithRedirect", error)
-      });
+      // for elm-live:
+      // - with LOCAL persistence, auth will lose state on recompile unless running --hot (with --pushstate)
+      // - with SESSION persistence, auth will work even without --hot (just --pushstate)
+      firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
+        firebase.auth().signInWithRedirect(provider).then(() => {
+          // sign in successful
+          console.log("signed in")
+        }).catch((error) => {
+          // An error happened.
+          console.log("error in signInWithRedirect", error)
+        });
+      }).catch(error => {
+        console.log("error", error)
+      })
     }
 
     signOut = function() {
@@ -56,12 +72,6 @@
         flags: flags,
       });
 
-      var db = firebase.firestore();
-
-      const params = new URLSearchParams(window.location.search)
-      if (params.has('emulator')) {
-        db.useEmulator("localhost", 38080)
-      }
 
       app.ports.signIn.subscribe(function(message) {
         signIn();
