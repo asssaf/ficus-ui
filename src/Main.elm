@@ -477,10 +477,9 @@ mainView model =
     { title = "Ficus"
     , body =
         [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
-            Element.column [ width fill, height fill ]
+            Element.column [ width fill, height fill, spacing 20 ]
                 [ headerView
                 , errView model.err
-                , nodesView model.nodes
                 , plantsView model.zone model.time (modelToPlantInfos model)
                 ]
         ]
@@ -517,21 +516,10 @@ errView : Maybe String -> Element Msg
 errView maybeErr =
     case maybeErr of
         Nothing ->
-            Element.text "no error"
+            Element.none
 
         Just err ->
             Element.text err
-
-
-nodesView : List Node -> Element Msg
-nodesView nodes =
-    Element.column []
-        (List.map nodeView nodes)
-
-
-nodeView : Node -> Element Msg
-nodeView node =
-    Element.text (node.id ++ " " ++ node.name)
 
 
 plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
