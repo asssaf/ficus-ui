@@ -13,11 +13,17 @@
 <body>
   <div id="myapp"></div>
   <script>
-    firebase.initializeApp({
-      apiKey: apiKey,
-      authDomain: authDomain,
-      projectId: projectId
-    });
+    try {
+      var config = {
+        apiKey: apiKey,
+        authDomain: authDomain,
+        projectId: projectId
+      }
+    } catch (error) {
+      console.log("ignoring error", error)
+    }
+
+    firebase.initializeApp(config);
 
     const auth = firebase.auth();
     const db = firebase.firestore();
