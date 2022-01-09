@@ -70,10 +70,13 @@ jobs:
       #    projectId: "${{ secrets.PROJECT_ID }}"
 
       - shell: bash
+        env:
+          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
+          GOOGLE_APPLICATION_CREDENTIALS: key.json
         run: |
           curl -L -o firebase https://firebase.tools/bin/linux/latest
           chmod a+x firebase
           cat > key.json <<EOF
           ${{secrets.FIREBASE_SERVICE_ACCOUNT }}
           EOF
-          ./firebase --version
+          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy "previewch"  
