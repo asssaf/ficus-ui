@@ -74,4 +74,4 @@ jobs:
           cat > key.json <<EOF
           ${{secrets.FIREBASE_SERVICE_ACCOUNT }}
           EOF
-          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy "${{ github.event_name == 'pull_request' && 'previewch' || live }}"  
+          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy "${{ github.event_name == 'pull_request' && 'previewch' || 'live' }}"  
