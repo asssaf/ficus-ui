@@ -65,7 +65,7 @@ jobs:
           echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: github.event_name == 'pull_request'
         with:
           firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
           projectId: "${{ secrets.PROJECT_ID }}"
-          channelId: "${{ github.event_name != 'pull_request' && 'live' }}"
