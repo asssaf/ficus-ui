@@ -1,0 +1,21 @@
+FROM scratch AS source
+
+ADD elm.json /work/elm.json
+ADD src /work/src
+
+
+FROM ghcr.io/asssaf/elm:master AS validate
+
+COPY --from=source /work /work
+RUN elm-format --validate /work/src
+
+
+FROM validate AS optimize
+
+WORKDIR /work
+RUN elm make --optimize --output=main.js /work/src/Main.elm
+
+
+FROM scratch AS output
+
+COPY --from=optimize /work/main.js /main.js
