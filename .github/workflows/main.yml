@@ -57,6 +57,7 @@ jobs:
       
       - shell: bash
         run: |
+          mkdir public
           cp main.js public/
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
