@@ -61,7 +61,7 @@ jobs:
           mkdir public
           cp index.html main.js public/
           echo 'var apiKey = "${{ secrets.API_KEY }}"' >> public/config.js
-          echo 'var authDomain = "${{ secrets.AUTH_DOMAIN }}' >> public/config.js
+          echo 'var authDomain = "${{ secrets.AUTH_DOMAIN }}"' >> public/config.js
           echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
