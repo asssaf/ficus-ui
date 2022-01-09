@@ -10,10 +10,8 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Html exposing (Html, button, div, text)
-import Html.Events exposing (onClick)
 import Json.Decode exposing (..)
-import Query exposing (..)
+import Query
 import Result.Extra as Result
 import Task
 import Time
@@ -151,7 +149,7 @@ initCmd flags =
                 [ Task.perform AdjustTimeZone Time.here
                 ]
 
-        Just user ->
+        Just _ ->
             Cmd.batch
                 [ Task.perform AdjustTimeZone Time.here
                 , sendQuery nodeQuery
@@ -303,17 +301,17 @@ update msg model =
             )
 
         SensorReceived sensorID maybeSensor ->
-            ( { model | sensors = Dict.update sensorID (\v -> maybeSensor) model.sensors }
+            ( { model | sensors = Dict.update sensorID (\_ -> maybeSensor) model.sensors }
             , Cmd.none
             )
 
         LastWaterGivenReceived motorID maybeWaterGiven ->
-            ( { model | lastWaterGivens = Dict.update motorID (\v -> maybeWaterGiven) model.lastWaterGivens }
+            ( { model | lastWaterGivens = Dict.update motorID (\_ -> maybeWaterGiven) model.lastWaterGivens }
             , Cmd.none
             )
 
         LastSensorReadingReceived sensorID maybeSensorReading ->
-            ( { model | lastSensorReadings = Dict.update sensorID (\v -> maybeSensorReading) model.lastSensorReadings }
+            ( { model | lastSensorReadings = Dict.update sensorID (\_ -> maybeSensorReading) model.lastSensorReadings }
             , Cmd.none
             )
 
@@ -356,7 +354,7 @@ snapshotToMessageDecoder snapshot =
                 |> Json.Decode.field "docs"
                 |> Json.Decode.map MotorsReceived
 
-        [ "nodes", nodeID, "sensors", sensorID ] ->
+        [ "nodes", _, "sensors", sensorID ] ->
             sensorDecoder
                 |> Json.Decode.field "data"
                 |> Json.Decode.list
@@ -364,7 +362,7 @@ snapshotToMessageDecoder snapshot =
                 |> Json.Decode.map List.head
                 |> Json.Decode.map (SensorReceived sensorID)
 
-        [ "nodes", nodeID, "motors", motorID, "done-by-day", "last" ] ->
+        [ "nodes", _, "motors", motorID, "done-by-day", "last" ] ->
             waterGivenDecoder
                 |> Json.Decode.field "data"
                 |> Json.Decode.list
@@ -372,7 +370,7 @@ snapshotToMessageDecoder snapshot =
                 |> Json.Decode.map List.head
                 |> Json.Decode.map (LastWaterGivenReceived motorID)
 
-        [ "nodes", nodeID, "sensors", sensorID, "readings", "last" ] ->
+        [ "nodes", _, "sensors", sensorID, "readings", "last" ] ->
             sensorReadingDecoder
                 |> Json.Decode.field "data"
                 |> Json.Decode.list
@@ -458,7 +456,7 @@ view model =
         Nothing ->
             loginView model
 
-        Just user ->
+        Just _ ->
             mainView model
 
 
@@ -575,7 +573,7 @@ plantViewBodyLeft zone time plantInfo =
 
 
 plantViewBodyRight : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
-plantViewBodyRight zone time plantInfo =
+plantViewBodyRight _ _ plantInfo =
     case Maybe.map2 readingToPercent plantInfo.sensor plantInfo.lastSensorReading of
         Nothing ->
             moistureBar 0 ""
@@ -604,7 +602,7 @@ moistureBar percent title =
             , Background.gradient { angle = 0, steps = [ rgb255 91 58 0, rgb255 20 203 0 ] }
             , behindContent (partialBar percent tileBGColor)
             ]
-            (Element.el [ centerX, centerY ] (Element.text (String.fromInt percent ++ "%")))
+            (Element.el [ centerX, centerY ] (Element.text title))
         ]
 
 

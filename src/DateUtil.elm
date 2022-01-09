@@ -1,6 +1,6 @@
 module DateUtil exposing (..)
 
-import Date exposing (Date)
+import Date
 import Time
 
 
