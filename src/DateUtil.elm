@@ -19,10 +19,13 @@ humaneTimeSince zone currentTime olderTime =
     in
     if days == 0 then
         "today"
+
     else if days == 1 then
         "yesterday"
+
     else if days < 14 then
         String.fromInt days ++ " days ago"
+
     else
         String.fromInt (days // 7) ++ " weeks ago"
 
@@ -31,6 +34,7 @@ durationConcise : Int -> String
 durationConcise seconds =
     if seconds < 60 then
         String.fromInt seconds ++ "s"
+
     else
         let
             minutes =
@@ -44,5 +48,6 @@ durationConcise seconds =
         in
         if remainingSeconds == 0 then
             minutesPart
+
         else
             minutesPart ++ " " ++ durationConcise remainingSeconds
