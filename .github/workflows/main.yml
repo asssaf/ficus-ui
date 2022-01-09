@@ -36,4 +36,10 @@ jobs:
           file: docker/Dockerfile.build
           context: .
           push: false
-          outputs: "type=local,dest=out/"
+          outputs: "type=local,dest=output/"
+
+      - name: Store build results
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-output
+          path: output/main.js
