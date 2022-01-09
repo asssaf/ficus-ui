@@ -59,7 +59,8 @@ jobs:
       - shell: bash
         run: |
           mkdir public
-          cp main.js public/
+          cp index.html main.js public/
+          echo "var apiKey = ${{ secrets.API_KEY }}" > public/config.js
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
