@@ -61,13 +61,8 @@ jobs:
           mkdir public
           cp index.html main.js public/
           echo 'var apiKey = "${{ secrets.API_KEY }}"' >> public/config.js
-          echo 'var authDomain = "${{ secrets.PR_AUTH_DOMAIN }}"' >> public/config.js
+          echo 'var authDomain = "${{ github.event_name == 'pull_request' && secrets.PR_AUTH_DOMAIN || secrets.AUTH_DOMAIN}}"' >> public/config.js
           echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
-
-      #- uses: FirebaseExtended/action-hosting-deploy@ff6e7dde58a4f7f1db590927596bf683250c6cc8
-      #  with:
-      #    firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
-      #    projectId: "${{ secrets.PROJECT_ID }}"
 
       - shell: bash
         env:
@@ -79,4 +74,4 @@ jobs:
           cat > key.json <<EOF
           ${{secrets.FIREBASE_SERVICE_ACCOUNT }}
           EOF
-          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy "previewch"  
+          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy "${{ github.event_name == 'pull_request' && 'previewch' || live }}"  
