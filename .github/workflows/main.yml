@@ -46,7 +46,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    environment: production
+    environment: prod
     needs: build
     steps:
       - uses: actions/checkout@v2
