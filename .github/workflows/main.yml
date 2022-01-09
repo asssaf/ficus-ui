@@ -43,3 +43,37 @@ jobs:
         with:
           name: build-output
           path: output/main.js
+
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+    needs: build
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Download build output
+        uses: actions/download-artifact@v2
+        with:
+          name: build-output
+      
+      - name: Customize config
+        shell: bash
+        run: |
+          mkdir public
+          cp index.html main.js public/
+          echo 'var apiKey = "${{ secrets.API_KEY }}"' >> public/config.js
+          echo 'var authDomain = "${{ github.event_name == 'pull_request' && secrets.PR_AUTH_DOMAIN || secrets.AUTH_DOMAIN}}"' >> public/config.js
+          echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
+
+      - name: Deploy
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
+          GOOGLE_APPLICATION_CREDENTIALS: key.json
+        run: |
+          curl -L -o firebase https://firebase.tools/bin/linux/latest
+          chmod a+x firebase
+          cat > $GOOGLE_APPLICATION_CREDENTIALS <<EOF
+          ${{secrets.FIREBASE_SERVICE_ACCOUNT }}
+          EOF
+          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy "${{ github.event_name == 'pull_request' && 'previewch' || 'live' }}"  
