@@ -61,7 +61,7 @@ jobs:
           mkdir public
           cp index.html main.js public/
           echo 'var apiKey = "${{ secrets.API_KEY }}"' >> public/config.js
-          echo 'var authDomain = "${{ github.event_name == 'pull_request' && (secrets.PROJECT_ID + '.firebaseapp.com') || secrets.AUTH_DOMAIN }}"' >> public/config.js
+          echo 'var authDomain = "${{ github.event_name == 'pull_request' && format('{0}.{1}', secrets.PROJECT_ID, '.firebaseapp.com') || secrets.AUTH_DOMAIN }}"' >> public/config.js
           echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
