@@ -65,9 +65,17 @@ jobs:
           echo 'var authDomain = "${{ github.event_name == 'pull_request' && secrets.PR_AUTH_DOMAIN || secrets.AUTH_DOMAIN}}"' >> public/config.js
           echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
 
-      - name: Deploy
+      - name: Deploy preview
+        if: github.event_name == 'pull_request'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
           projectId: "${{ secrets.PROJECT_ID }}"
-          channelId: "${{ github.event_name != 'pull_request' && 'live' }}"
+
+      - name: Deploy live
+        if: github.event_name != 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          projectId: "${{ secrets.PROJECT_ID }}"
+          channelId: "live"
