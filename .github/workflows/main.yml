@@ -67,9 +67,6 @@ jobs:
 
       - name: Prepare for deploy
         shell: bash
-        env:
-          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
-          GOOGLE_APPLICATION_CREDENTIALS: key.json
         run: |
           curl -L -o firebase https://firebase.tools/bin/linux/latest
           chmod a+x firebase
@@ -79,10 +76,16 @@ jobs:
           
       - name: Deploy preview
         if: github.event_name == 'pull_request'
+        env:
+          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
+          GOOGLE_APPLICATION_CREDENTIALS: key.json
         run: |
           ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy previewch
 
       - name: Deploy live
         if: github.event_name != 'pull_request'
+        env:
+          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
+          GOOGLE_APPLICATION_CREDENTIALS: key.json
         run: |
           ./firebase --project "${{ secrets.PROJECT_ID }}" deploy --only hosting
