@@ -161,6 +161,7 @@ nodeQuery : Query.Query
 nodeQuery =
     { id = "nodes"
     , path = [ "nodes" ]
+    , whereElements = []
     , orderBy = Nothing
     , limit = Just 10
     , collectionGroup = False
@@ -171,6 +172,12 @@ motorQuery : Query.Query
 motorQuery =
     { id = "motors"
     , path = [ "motors" ]
+    , whereElements =
+        [ { field = "visible"
+          , op = "!="
+          , value = "false"
+          }
+        ]
     , orderBy = Nothing
     , limit = Just 10
     , collectionGroup = True
@@ -181,6 +188,7 @@ sensorQuery : String -> String -> Query.Query
 sensorQuery nodeID sensorID =
     { id = "nodes/" ++ nodeID ++ "/sensors/" ++ sensorID
     , path = [ "nodes", nodeID, "sensors", sensorID ]
+    , whereElements = []
     , orderBy = Nothing
     , limit = Nothing
     , collectionGroup = False
@@ -191,6 +199,7 @@ lastDoneByDayQuery : String -> String -> Query.Query
 lastDoneByDayQuery nodeID motorID =
     { id = "nodes/" ++ nodeID ++ "/motors/" ++ motorID ++ "/done-by-day/last"
     , path = [ "nodes", nodeID, "motors", motorID, "done-by-day" ]
+    , whereElements = []
     , orderBy = Just { field = "start", dir = "desc" }
     , limit = Just 1
     , collectionGroup = False
@@ -201,6 +210,7 @@ lastSensorReadingQuery : String -> String -> Query.Query
 lastSensorReadingQuery nodeID sensorID =
     { id = "nodes/" ++ nodeID ++ "/sensors/" ++ sensorID ++ "/readings/last"
     , path = [ "nodes", nodeID, "sensors", sensorID, "readings" ]
+    , whereElements = []
     , orderBy = Just { field = "timestamp", dir = "desc" }
     , limit = Just 1
     , collectionGroup = False

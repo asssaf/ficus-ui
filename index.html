@@ -111,6 +111,11 @@
           }
         }
 
+        for (i = 0; i < query.whereElements.length; i++) {
+          var whereElement = query.whereElements[i]
+          q = q.where(whereElement.field, whereElement.op, JSON.parse(whereElement.value))
+        }
+
         if (query.orderBy) {
           q = q.orderBy(query.orderBy.field, query.orderBy.dir)
         }
