@@ -7,6 +7,7 @@ type alias Query =
     { id : String
     , path : QueryPath
     , orderBy : Maybe OrderBy
+    , whereElements : List Where
     , limit : Maybe Int
     , collectionGroup : Bool
     }
@@ -18,6 +19,13 @@ type alias QueryPath =
 
 type alias QueryPathElement =
     String
+
+
+type alias Where =
+    { field : String
+    , op : String
+    , value : String
+    }
 
 
 type alias OrderBy =
