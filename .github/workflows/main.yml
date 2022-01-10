@@ -65,29 +65,9 @@ jobs:
           echo 'var authDomain = "${{ github.event_name == 'pull_request' && secrets.PR_AUTH_DOMAIN || secrets.AUTH_DOMAIN}}"' >> public/config.js
           echo 'var projectId = "${{ secrets.PROJECT_ID }}"' >> public/config.js
 
-      - name: Prepare for deploy
-        shell: bash
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: key.json
-        run: |
-          curl -L -o firebase https://firebase.tools/bin/linux/latest
-          chmod a+x firebase
-          cat > $GOOGLE_APPLICATION_CREDENTIALS <<EOF
-          ${{secrets.FIREBASE_SERVICE_ACCOUNT }}
-          EOF
-          
-      - name: Deploy preview
-        if: github.event_name == 'pull_request'
-        env:
-          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
-          GOOGLE_APPLICATION_CREDENTIALS: key.json
-        run: |
-          ./firebase --project "${{ secrets.PROJECT_ID }}" hosting:channel:deploy previewch
-
-      - name: Deploy live
-        if: github.event_name != 'pull_request'
-        env:
-          FIREBASE_DEPLOY_AGENT: "action-hosting-deploy"
-          GOOGLE_APPLICATION_CREDENTIALS: key.json
-        run: |
-          ./firebase --project "${{ secrets.PROJECT_ID }}" deploy --only hosting
+      - name: Deploy
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          projectId: "${{ secrets.PROJECT_ID }}"
+          channelId: "${{ github.event_name == 'pull_request' && '' || 'live' }}"
