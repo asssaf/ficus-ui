@@ -67,6 +67,8 @@ jobs:
 
       - name: Prepare for deploy
         shell: bash
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: key.json
         run: |
           curl -L -o firebase https://firebase.tools/bin/linux/latest
           chmod a+x firebase
