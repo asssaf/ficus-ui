@@ -38,6 +38,9 @@ main =
 -- PORTS
 
 
+port logReceiver : (Json.Decode.Value -> msg) -> Sub msg
+
+
 port signIn : () -> Cmd msg
 
 
@@ -58,6 +61,11 @@ type alias Flags =
     { user : Maybe User
     , width : Int
     , height : Int
+    }
+
+
+type alias LogItem =
+    { message : String
     }
 
 
@@ -240,6 +248,7 @@ type Msg
     | Tick Time.Posix
     | AdjustTimeZone Time.Zone
     | Resized Int Int
+    | LogItemReceived Json.Decode.Value
     | SignIn
     | SignOut
     | ErrorParsingResponse String
@@ -282,6 +291,9 @@ update msg model =
             , Cmd.none
             )
 
+        LogItemReceived logItem ->
+            update (decodeLogItemAndExtract logItem) model
+
         SignIn ->
             ( model
             , signIn ()
@@ -293,7 +305,7 @@ update msg model =
             )
 
         QueryResponseReceived response ->
-            update (decodeAndExtract response) model
+            update (decodeQueryResponseAndExtract response) model
 
         ErrorParsingResponse err ->
             ( { model | err = Just err }
@@ -331,8 +343,21 @@ setSize w h flags =
     { flags | width = w, height = h }
 
 
-decodeAndExtract : Json.Decode.Value -> Msg
-decodeAndExtract response =
+decodeLogItemAndExtract : Json.Decode.Value -> Msg
+decodeLogItemAndExtract response =
+    Json.Decode.decodeValue logItemDecoder response
+        |> Result.map (\li -> ErrorParsingResponse li.message)
+        |> Result.extract parseErrorToMessage
+
+
+logItemDecoder : Json.Decode.Decoder LogItem
+logItemDecoder =
+    Json.Decode.map LogItem
+        (field "message" Json.Decode.string)
+
+
+decodeQueryResponseAndExtract : Json.Decode.Value -> Msg
+decodeQueryResponseAndExtract response =
     Json.Decode.decodeValue queryResponseDecoder response
         |> Result.extract parseErrorToMessage
 
@@ -452,6 +477,7 @@ subscriptions _ =
     Sub.batch
         [ Time.every 1000 Tick
         , Browser.Events.onResize (\w h -> Resized w h)
+        , logReceiver LogItemReceived
         , queryResponseReceiver QueryResponseReceived
         ]
 

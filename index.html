@@ -113,7 +113,18 @@
 
         for (i = 0; i < query.whereElements.length; i++) {
           var whereElement = query.whereElements[i]
-          q = q.where(whereElement.field, whereElement.op, JSON.parse(whereElement.value))
+          try {
+            var parsedValue = JSON.parse(whereElement.value)
+            q = q.where(whereElement.field, whereElement.op, parsedValue)
+          } catch (error) {
+            var errObj = {
+              "message": "failed to parse JSON value '" + whereElement.value + "': " + error,
+              "details": error,
+              "level": "error",
+            }
+            app.ports.logReceiver.send(errObj)
+            return
+          }
         }
 
         if (query.orderBy) {
