@@ -66,6 +66,7 @@ type alias Flags =
 
 type alias LogItem =
     { message : String
+    , level : String
     }
 
 
@@ -249,6 +250,7 @@ type Msg
     | AdjustTimeZone Time.Zone
     | Resized Int Int
     | LogItemReceived Json.Decode.Value
+    | LogItemAdded LogItem
     | SignIn
     | SignOut
     | ErrorParsingResponse String
@@ -293,6 +295,16 @@ update msg model =
 
         LogItemReceived logItem ->
             update (decodeLogItemAndExtract logItem) model
+
+        LogItemAdded logItem ->
+            case logItem.level of
+                "error" ->
+                    update (ErrorParsingResponse logItem.message) model
+
+                _ ->
+                    ( model
+                    , Cmd.none
+                    )
 
         SignIn ->
             ( model
@@ -346,14 +358,15 @@ setSize w h flags =
 decodeLogItemAndExtract : Json.Decode.Value -> Msg
 decodeLogItemAndExtract response =
     Json.Decode.decodeValue logItemDecoder response
-        |> Result.map (\li -> ErrorParsingResponse li.message)
+        |> Result.map LogItemAdded
         |> Result.extract parseErrorToMessage
 
 
 logItemDecoder : Json.Decode.Decoder LogItem
 logItemDecoder =
-    Json.Decode.map LogItem
+    Json.Decode.map2 LogItem
         (field "message" Json.Decode.string)
+        (field "level" Json.Decode.string)
 
 
 decodeQueryResponseAndExtract : Json.Decode.Value -> Msg

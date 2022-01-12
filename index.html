@@ -13,6 +13,46 @@
 <body>
   <div id="myapp"></div>
   <script>
+    window.onerror = function(msg) {
+      console.error(msg)
+    }
+
+    // redefine the console to send to the app through the logging port
+    var sendLog = null;
+
+    var console=(function(oldCons){
+      return {
+        log: function(...args){
+          oldCons.log(...args);
+          if (sendLog) {
+            sendLog("debug", ...args)
+          }
+        },
+        info: function (...args) {
+          oldCons.info(...args);
+          if (sendLog) {
+            sendLog("info", ...args)
+          }
+        },
+        warn: function (...args) {
+          oldCons.warn(...args);
+          if (sendLog) {
+            sendLog("warn", ...args)
+          }
+        },
+        error: function (...args) {
+          oldCons.error(...args);
+          if (sendLog) {
+            sendLog("error", ...args)
+          }
+        }
+      };
+    }(window.console));
+
+    // override the default console
+    window.console = console;
+
+
     try {
       var config = {
         apiKey: apiKey,
@@ -77,6 +117,15 @@
         flags: flags,
       });
 
+      sendLog = function(level, ...args) {
+        var errObj = {
+          "message": args[0],
+          "level": level,
+        }
+        app.ports.logReceiver.send(errObj)
+      }
+
+
 
       app.ports.signIn.subscribe(function(message) {
         signIn();
@@ -117,12 +166,7 @@
             var parsedValue = JSON.parse(whereElement.value)
             q = q.where(whereElement.field, whereElement.op, parsedValue)
           } catch (error) {
-            var errObj = {
-              "message": "failed to parse JSON value '" + whereElement.value + "': " + error,
-              "details": error,
-              "level": "error",
-            }
-            app.ports.logReceiver.send(errObj)
+            console.error("failed to parse JSON value '" + whereElement.value + "': " + error)
             return
           }
         }
