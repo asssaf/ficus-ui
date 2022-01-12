@@ -44,6 +44,8 @@
           oldCons.error(...args);
           if (sendLog) {
             sendLog("error", ...args)
+          } else {
+            window.alert(args[0])
           }
         }
       };
@@ -88,7 +90,7 @@
           console.log("signed in")
         }).catch((error) => {
           // An error happened.
-          console.log("error in signInWithRedirect", error)
+          console.error("error in signInWithRedirect", error)
         });
       }).catch(error => {
         console.log("error", error)
@@ -101,7 +103,7 @@
         console.log("signed out")
       }).catch((error) => {
         // An error happened.
-        console.log("error in signOut", error)
+        console.error("error in signOut", error)
       });
     }
 
@@ -224,7 +226,7 @@
           }
         }
 
-        var handle = q.onSnapshot(snapshotHandler, (error) => console.log("error in listener", query.id, error))
+        var handle = q.onSnapshot(snapshotHandler, (error) => console.error("error in listener", query.id, error))
         queryHandles[query.id] = handle
       });
     }
@@ -245,20 +247,20 @@
             console.log("logged in")
             start(user)
           }).catch((error) => {
-            console.log("error in getIdToken()", error)
+            console.error("error in getIdToken()", error)
           });
         } else {
           console.log("logged out")
           start(user)
         }
       }, function(error) {
-        console.log("error in onAuthStateChanged", error);
+        console.error("error in onAuthStateChanged", error);
       });
 
       firebase.auth().onIdTokenChanged(function(user) {
         console.log("id token changed", user)
       }, function(error) {
-        console.log("error in onIdTokenChanged", error);
+        console.error("error in onIdTokenChanged", error);
       });
     };
 
