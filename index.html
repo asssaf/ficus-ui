@@ -121,13 +121,11 @@
 
       sendLog = function(level, ...args) {
         var errObj = {
-          "message": args[0],
+          "message": args[0] + ": " + JSON.stringify(args.slice(1)),
           "level": level,
         }
         app.ports.logReceiver.send(errObj)
       }
-
-
 
       app.ports.signIn.subscribe(function(message) {
         signIn();
