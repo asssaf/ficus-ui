@@ -13,6 +13,48 @@
 <body>
   <div id="myapp"></div>
   <script>
+    window.onerror = function(msg) {
+      console.error(msg)
+    }
+
+    // redefine the console to send to the app through the logging port
+    var sendLog = null;
+
+    var console=(function(oldCons){
+      return {
+        log: function(...args){
+          oldCons.log(...args);
+          if (sendLog) {
+            sendLog("debug", ...args)
+          }
+        },
+        info: function (...args) {
+          oldCons.info(...args);
+          if (sendLog) {
+            sendLog("info", ...args)
+          }
+        },
+        warn: function (...args) {
+          oldCons.warn(...args);
+          if (sendLog) {
+            sendLog("warn", ...args)
+          }
+        },
+        error: function (...args) {
+          oldCons.error(...args);
+          if (sendLog) {
+            sendLog("error", ...args)
+          } else {
+            window.alert(args[0])
+          }
+        }
+      };
+    }(window.console));
+
+    // override the default console
+    window.console = console;
+
+
     try {
       var config = {
         apiKey: apiKey,
@@ -48,7 +90,7 @@
           console.log("signed in")
         }).catch((error) => {
           // An error happened.
-          console.log("error in signInWithRedirect", error)
+          console.error("error in signInWithRedirect", error)
         });
       }).catch(error => {
         console.log("error", error)
@@ -61,7 +103,7 @@
         console.log("signed out")
       }).catch((error) => {
         // An error happened.
-        console.log("error in signOut", error)
+        console.error("error in signOut", error)
       });
     }
 
@@ -77,6 +119,13 @@
         flags: flags,
       });
 
+      sendLog = function(level, ...args) {
+        var errObj = {
+          "message": args[0] + ": " + JSON.stringify(args.slice(1)),
+          "level": level,
+        }
+        app.ports.logReceiver.send(errObj)
+      }
 
       app.ports.signIn.subscribe(function(message) {
         signIn();
@@ -113,7 +162,13 @@
 
         for (i = 0; i < query.whereElements.length; i++) {
           var whereElement = query.whereElements[i]
-          q = q.where(whereElement.field, whereElement.op, JSON.parse(whereElement.value))
+          try {
+            var parsedValue = JSON.parse(whereElement.value)
+            q = q.where(whereElement.field, whereElement.op, parsedValue)
+          } catch (error) {
+            console.error("failed to parse JSON value '" + whereElement.value + "': " + error)
+            return
+          }
         }
 
         if (query.orderBy) {
@@ -169,7 +224,7 @@
           }
         }
 
-        var handle = q.onSnapshot(snapshotHandler, (error) => console.log("error in listener", query.id, error))
+        var handle = q.onSnapshot(snapshotHandler, (error) => console.error("error in listener", query.id, error))
         queryHandles[query.id] = handle
       });
     }
@@ -190,20 +245,20 @@
             console.log("logged in")
             start(user)
           }).catch((error) => {
-            console.log("error in getIdToken()", error)
+            console.error("error in getIdToken()", error)
           });
         } else {
           console.log("logged out")
           start(user)
         }
       }, function(error) {
-        console.log("error in onAuthStateChanged", error);
+        console.error("error in onAuthStateChanged", error);
       });
 
       firebase.auth().onIdTokenChanged(function(user) {
         console.log("id token changed", user)
       }, function(error) {
-        console.log("error in onIdTokenChanged", error);
+        console.error("error in onIdTokenChanged", error);
       });
     };
 
