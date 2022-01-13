@@ -573,7 +573,21 @@ errView maybeErr =
 plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
 plantsView zone time plantInfos =
     Element.column [ padding 10, spacing 20, width fill, height fill ] <|
-        List.map (plantView zone time) plantInfos
+        listMapWithDefault emptyListView (plantView zone time) plantInfos
+
+
+listMapWithDefault : Element Msg -> (a -> Element Msg) -> List a -> List (Element Msg)
+listMapWithDefault defaultElement dataToElement data =
+    case data of
+        [] ->
+            [ defaultElement ]
+
+        _ ->
+            List.map dataToElement data
+
+
+emptyListView =
+    Element.text "Nothing to show"
 
 
 lightBlue =
