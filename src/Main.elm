@@ -573,17 +573,18 @@ errView maybeErr =
 plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
 plantsView zone time plantInfos =
     Element.column [ padding 10, spacing 20, width fill, height fill ] <|
-        listMapWithDefault emptyListView (plantView zone time) plantInfos
+        listWithDefault emptyListView <|
+            List.map (plantView zone time) plantInfos
 
 
-listMapWithDefault : Element Msg -> (a -> Element Msg) -> List a -> List (Element Msg)
-listMapWithDefault defaultElement dataToElement data =
-    case data of
+listWithDefault : a -> List a -> List a
+listWithDefault default list =
+    case list of
         [] ->
-            [ defaultElement ]
+            [ default ]
 
         _ ->
-            List.map dataToElement data
+            list
 
 
 emptyListView =
