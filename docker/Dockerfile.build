@@ -9,6 +9,7 @@ FROM ghcr.io/asssaf/elm:master AS validate
 COPY --from=source /work /work
 RUN elm-format --validate /work/src
 
+RUN elm-review --template jfmengels/elm-review-unused/example --elmjson /work/elm.json /work
 
 FROM validate AS optimize
 
