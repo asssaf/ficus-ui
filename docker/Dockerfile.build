@@ -2,12 +2,18 @@ FROM scratch AS source
 
 ADD elm.json /work/elm.json
 ADD src /work/src
+ADD review /work/review
 
 
 FROM ghcr.io/asssaf/elm:master AS validate
 
 COPY --from=source /work /work
-RUN elm-format --validate /work/src
+
+WORKDIR /work
+
+RUN elm-format --validate ./src
+
+RUN elm-review
 
 
 FROM validate AS optimize
