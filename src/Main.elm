@@ -3,6 +3,7 @@ port module Main exposing (..)
 import Browser
 import Browser.Events
 import Browser.Navigation as Nav
+import CollectionUtil exposing (..)
 import DateUtil exposing (..)
 import Dict exposing (Dict)
 import Element exposing (..)
@@ -575,16 +576,6 @@ plantsView zone time plantInfos =
     Element.column [ padding 10, spacing 20, width fill, height fill ] <|
         listWithDefault emptyListView <|
             List.map (plantView zone time) plantInfos
-
-
-listWithDefault : a -> List a -> List a
-listWithDefault default list =
-    case list of
-        [] ->
-            [ default ]
-
-        _ ->
-            list
 
 
 emptyListView =
