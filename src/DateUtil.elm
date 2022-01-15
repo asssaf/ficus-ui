@@ -1,6 +1,7 @@
 module DateUtil exposing (..)
 
 import Date
+import Json.Decode
 import Time
 
 
@@ -51,3 +52,9 @@ durationConcise seconds =
 
         else
             minutesPart ++ " " ++ durationConcise remainingSeconds
+
+
+posixDecoder : Json.Decode.Decoder Time.Posix
+posixDecoder =
+    Json.Decode.int
+        |> Json.Decode.map (\s -> Time.millisToPosix (s * 1000))

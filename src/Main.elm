@@ -5,18 +5,23 @@ import Browser.Events
 import Browser.Navigation as Nav
 import CollectionUtil exposing (..)
 import DateUtil exposing (..)
-import Dict exposing (Dict)
+import Dict
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode exposing (..)
+import Motor exposing (Motor, motorDecoder)
+import Plant
 import Query
 import Result.Extra as Result
+import Sensor exposing (Sensor, sensorDecoder)
+import SensorReading exposing (SensorReading, sensorReadingDecoder)
 import Task
 import Time
 import Url
+import WaterGiven exposing (WaterGiven, waterGivenDecoder)
 
 
 
@@ -79,10 +84,7 @@ type alias Model =
     , time : Time.Posix
     , err : Maybe String
     , nodes : List Node
-    , motors : List Motor
-    , sensors : Dict String Sensor
-    , lastWaterGivens : Dict String WaterGiven
-    , lastSensorReadings : Dict String SensorReading
+    , plants : Plant.Model
     }
 
 
@@ -97,39 +99,11 @@ type alias Node =
     }
 
 
-type alias Motor =
-    { id : String
-    , nodeID : String
-    , name : String
-    , typ : String
-    , enabled : Bool
-    , triggerSensorId : String
-    }
-
-
-type alias Sensor =
-    { min : Int
-    , max : Int
-    }
-
-
 type alias PlantInfo =
     { motor : Motor
     , sensor : Maybe Sensor
     , lastWaterGiven : Maybe WaterGiven
     , lastSensorReading : Maybe SensorReading
-    }
-
-
-type alias WaterGiven =
-    { seconds : Int
-    , start : Time.Posix
-    }
-
-
-type alias SensorReading =
-    { value : Int
-    , timestamp : Time.Posix
     }
 
 
@@ -142,10 +116,7 @@ init flags url key =
       , time = Time.millisToPosix 0
       , err = Nothing
       , nodes = []
-      , motors = []
-      , sensors = Dict.empty
-      , lastWaterGivens = Dict.empty
-      , lastSensorReadings = Dict.empty
+      , plants = Plant.init
       }
     , initCmd flags
     )
@@ -237,7 +208,7 @@ queryForMotor motor =
 
 queriesForMotors : List Motor -> List Query.Query
 queriesForMotors motors =
-    List.concat (List.map queryForMotor motors)
+    List.concatMap queryForMotor motors
 
 
 
@@ -331,22 +302,24 @@ update msg model =
             )
 
         MotorsReceived motors ->
-            ( { model | motors = motors }
-            , Cmd.batch (List.map sendQuery (queriesForMotors motors))
+            ( { model | plants = Plant.updateMotors motors model.plants }
+            , Cmd.batch <|
+                List.map sendQuery <|
+                    queriesForMotors motors
             )
 
         SensorReceived sensorID maybeSensor ->
-            ( { model | sensors = Dict.update sensorID (\_ -> maybeSensor) model.sensors }
+            ( { model | plants = Plant.updateSensor sensorID maybeSensor model.plants }
             , Cmd.none
             )
 
         LastWaterGivenReceived motorID maybeWaterGiven ->
-            ( { model | lastWaterGivens = Dict.update motorID (\_ -> maybeWaterGiven) model.lastWaterGivens }
+            ( { model | plants = Plant.updateWaterGiven motorID maybeWaterGiven model.plants }
             , Cmd.none
             )
 
         LastSensorReadingReceived sensorID maybeSensorReading ->
-            ( { model | lastSensorReadings = Dict.update sensorID (\_ -> maybeSensorReading) model.lastSensorReadings }
+            ( { model | plants = Plant.updateSensorReading sensorID maybeSensorReading model.plants }
             , Cmd.none
             )
 
@@ -444,44 +417,6 @@ nodeDecoder =
         (field "name" Json.Decode.string)
 
 
-motorDecoder : Json.Decode.Decoder Motor
-motorDecoder =
-    Json.Decode.map6 Motor
-        (field "id" Json.Decode.string)
-        (field "parentID" Json.Decode.string)
-        (field "name" Json.Decode.string)
-        (field "type" Json.Decode.string)
-        (field "enabled" Json.Decode.bool)
-        (field "triggerSensorId" Json.Decode.string)
-
-
-sensorDecoder : Json.Decode.Decoder Sensor
-sensorDecoder =
-    Json.Decode.map2 Sensor
-        (field "min" Json.Decode.int)
-        (field "max" Json.Decode.int)
-
-
-waterGivenDecoder : Json.Decode.Decoder WaterGiven
-waterGivenDecoder =
-    Json.Decode.map2 WaterGiven
-        (field "done" Json.Decode.int)
-        (field "start" posixDecoder)
-
-
-sensorReadingDecoder : Json.Decode.Decoder SensorReading
-sensorReadingDecoder =
-    Json.Decode.map2 SensorReading
-        (field "moisture" Json.Decode.int)
-        (field "timestamp" posixDecoder)
-
-
-posixDecoder : Json.Decode.Decoder Time.Posix
-posixDecoder =
-    Json.Decode.int
-        |> Json.Decode.map (\s -> Time.millisToPosix (s * 1000))
-
-
 
 -- SUBSCRIPTIONS
 
@@ -550,14 +485,14 @@ headerView =
 
 modelToPlantInfos : Model -> List PlantInfo
 modelToPlantInfos model =
-    List.map (\motor -> motorToPlantInfo motor model) model.motors
+    List.map (\motor -> motorToPlantInfo motor model) (Dict.values model.plants.motors)
 
 
 motorToPlantInfo motor model =
     { motor = motor
-    , sensor = Dict.get motor.triggerSensorId model.sensors
-    , lastWaterGiven = Dict.get motor.id model.lastWaterGivens
-    , lastSensorReading = Dict.get motor.triggerSensorId model.lastSensorReadings
+    , sensor = Dict.get motor.triggerSensorId model.plants.sensors
+    , lastWaterGiven = Dict.get motor.id model.plants.lastWaterGivens
+    , lastSensorReading = Dict.get motor.triggerSensorId model.plants.lastSensorReadings
     }
 
 
