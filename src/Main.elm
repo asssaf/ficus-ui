@@ -3,11 +3,8 @@ port module Main exposing (..)
 import Browser
 import Browser.Events
 import Browser.Navigation as Nav
-import Constants exposing (..)
 import Element exposing (..)
-import Element.Background as Background
-import Element.Font as Font
-import Element.Input as Input
+import Header
 import Json.Decode exposing (..)
 import Login
 import Plant
@@ -39,9 +36,6 @@ main =
 
 
 port logReceiver : (Json.Decode.Value -> msg) -> Sub msg
-
-
-port signOut : () -> Cmd msg
 
 
 port sendQuery : Query.Query -> Cmd msg
@@ -149,11 +143,11 @@ type Msg
     | Resized Int Int
     | LogItemReceived Json.Decode.Value
     | LogItemAdded LogItem
-    | SignOut
     | ErrorParsingResponse String
     | QueryResponseReceived Json.Decode.Value
     | NodesReceived (List Node)
     | LoginMsg Login.Msg
+    | HeaderMsg Header.Msg
     | PlantMsg Plant.Msg
 
 
@@ -201,11 +195,6 @@ update msg model =
                     , Cmd.none
                     )
 
-        SignOut ->
-            ( model
-            , signOut ()
-            )
-
         QueryResponseReceived response ->
             update (decodeQueryResponseAndExtract response) model
 
@@ -217,6 +206,11 @@ update msg model =
         NodesReceived nodes ->
             ( { model | nodes = nodes }
             , Cmd.none
+            )
+
+        HeaderMsg headerMsg ->
+            ( model
+            , Header.update headerMsg
             )
 
         LoginMsg loginMsg ->
@@ -377,26 +371,13 @@ mainView model =
     , body =
         [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
             Element.column [ width fill, height fill, spacing 20 ]
-                [ headerView
+                [ Header.view |> Element.map HeaderMsg
                 , errView model.err
                 , Plant.view model.zone model.time model.plants
                     |> Element.map PlantMsg
                 ]
         ]
     }
-
-
-headerView : Element Msg
-headerView =
-    Element.row
-        [ padding 10
-        , width fill
-        , Font.color lightBlue
-        , Background.color (rgb255 66 135 245)
-        ]
-        [ Element.el [ alignLeft ] (Element.text "Ficus")
-        , Element.el [ alignRight ] signOutButton
-        ]
 
 
 errView : Maybe String -> Element Msg
@@ -407,11 +388,3 @@ errView maybeErr =
 
         Just err ->
             Element.text err
-
-
-signOutButton =
-    Input.button
-        []
-        { label = Element.text "Sign Out"
-        , onPress = Just SignOut
-        }
