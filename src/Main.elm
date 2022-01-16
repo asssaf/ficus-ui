@@ -9,6 +9,7 @@ import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode exposing (..)
+import Login
 import Plant
 import Query
 import Result.Extra as Result
@@ -38,9 +39,6 @@ main =
 
 
 port logReceiver : (Json.Decode.Value -> msg) -> Sub msg
-
-
-port signIn : () -> Cmd msg
 
 
 port signOut : () -> Cmd msg
@@ -151,11 +149,11 @@ type Msg
     | Resized Int Int
     | LogItemReceived Json.Decode.Value
     | LogItemAdded LogItem
-    | SignIn
     | SignOut
     | ErrorParsingResponse String
     | QueryResponseReceived Json.Decode.Value
     | NodesReceived (List Node)
+    | LoginMsg Login.Msg
     | PlantMsg Plant.Msg
 
 
@@ -203,11 +201,6 @@ update msg model =
                     , Cmd.none
                     )
 
-        SignIn ->
-            ( model
-            , signIn ()
-            )
-
         SignOut ->
             ( model
             , signOut ()
@@ -224,6 +217,11 @@ update msg model =
         NodesReceived nodes ->
             ( { model | nodes = nodes }
             , Cmd.none
+            )
+
+        LoginMsg loginMsg ->
+            ( model
+            , Login.update loginMsg
             )
 
         PlantMsg plantMsg ->
@@ -367,8 +365,8 @@ loginView model =
     { title = "Ficus"
     , body =
         [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
-            Element.column [ width fill, height fill ]
-                [ Element.el [ width fill, height (px 200) ] signInButton ]
+            Element.map LoginMsg <|
+                Login.view
         ]
     }
 
@@ -382,7 +380,7 @@ mainView model =
                 [ headerView
                 , errView model.err
                 , Plant.view model.zone model.time model.plants
-                    |> Element.map (\msg -> PlantMsg msg)
+                    |> Element.map PlantMsg
                 ]
         ]
     }
@@ -409,14 +407,6 @@ errView maybeErr =
 
         Just err ->
             Element.text err
-
-
-signInButton =
-    Input.button
-        [ centerX, centerY ]
-        { label = Element.text "Sign In"
-        , onPress = Just SignIn
-        }
 
 
 signOutButton =
