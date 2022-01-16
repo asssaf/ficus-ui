@@ -3,12 +3,9 @@ port module Main exposing (..)
 import Browser
 import Browser.Events
 import Browser.Navigation as Nav
-import CollectionUtil exposing (..)
-import DateUtil exposing (..)
-import Dict
+import Constants exposing (..)
 import Element exposing (..)
 import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode exposing (..)
@@ -96,14 +93,6 @@ type alias User =
 type alias Node =
     { id : String
     , name : String
-    }
-
-
-type alias PlantInfo =
-    { motor : Motor
-    , sensor : Maybe Sensor
-    , lastWaterGiven : Maybe WaterGiven
-    , lastSensorReading : Maybe SensorReading
     }
 
 
@@ -232,6 +221,7 @@ type Msg
     | SensorReceived String (Maybe Sensor)
     | LastWaterGivenReceived String (Maybe WaterGiven)
     | LastSensorReadingReceived String (Maybe SensorReading)
+    | PlantMsg Plant.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -320,6 +310,11 @@ update msg model =
 
         LastSensorReadingReceived sensorID maybeSensorReading ->
             ( { model | plants = Plant.updateSensorReading sensorID maybeSensorReading model.plants }
+            , Cmd.none
+            )
+
+        PlantMsg plantMsg ->
+            ( { model | plants = Plant.update plantMsg model.plants }
             , Cmd.none
             )
 
@@ -464,7 +459,8 @@ mainView model =
             Element.column [ width fill, height fill, spacing 20 ]
                 [ headerView
                 , errView model.err
-                , plantsView model.zone model.time (modelToPlantInfos model)
+                , Plant.view model.zone model.time model.plants
+                    |> Element.map (\msg -> PlantMsg msg)
                 ]
         ]
     }
@@ -483,19 +479,6 @@ headerView =
         ]
 
 
-modelToPlantInfos : Model -> List PlantInfo
-modelToPlantInfos model =
-    List.map (\motor -> motorToPlantInfo motor model) (Dict.values model.plants.motors)
-
-
-motorToPlantInfo motor model =
-    { motor = motor
-    , sensor = Dict.get motor.triggerSensorId model.plants.sensors
-    , lastWaterGiven = Dict.get motor.id model.plants.lastWaterGivens
-    , lastSensorReading = Dict.get motor.triggerSensorId model.plants.lastSensorReadings
-    }
-
-
 errView : Maybe String -> Element Msg
 errView maybeErr =
     case maybeErr of
@@ -504,150 +487,6 @@ errView maybeErr =
 
         Just err ->
             Element.text err
-
-
-plantsView : Time.Zone -> Time.Posix -> List PlantInfo -> Element Msg
-plantsView zone time plantInfos =
-    Element.column [ padding 10, spacing 20, width fill, height fill ] <|
-        listWithDefault emptyListView <|
-            List.map (plantView zone time) plantInfos
-
-
-emptyListView =
-    Element.text "Nothing to show"
-
-
-lightBlue =
-    rgb255 171 211 246
-
-
-tileBGColor =
-    lightBlue
-
-
-plantView : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
-plantView zone time plantInfo =
-    Element.column
-        [ Background.color tileBGColor
-        , Font.color (rgb255 0 0 0)
-        , Border.rounded 10
-        , padding 20
-        , spacing 10
-        , width (fill |> minimum 250 |> maximum 800)
-        , centerX
-        ]
-        [ plantViewHeader plantInfo
-        , plantViewBody zone time plantInfo
-        ]
-
-
-plantViewHeader : PlantInfo -> Element Msg
-plantViewHeader plantInfo =
-    Element.el [ Font.bold ] (Element.text (plantInfo.motor.name ++ " | " ++ plantInfo.motor.nodeID))
-
-
-plantViewBody : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
-plantViewBody zone time plantInfo =
-    Element.row [ spacing 30, width fill ]
-        [ Element.el [ width (fillPortion 7), height fill ] <| plantViewBodyLeft zone time plantInfo
-        , Element.el [ width (fillPortion 3), height fill ] <| plantViewBodyRight zone time plantInfo
-        ]
-
-
-plantViewBodyLeft : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
-plantViewBodyLeft zone time plantInfo =
-    Element.column [ spacing 5 ]
-        [ motorLastWateredLabel zone time plantInfo.lastWaterGiven
-        , lastReadingLabel zone time plantInfo.sensor plantInfo.lastSensorReading
-        ]
-
-
-plantViewBodyRight : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
-plantViewBodyRight _ _ plantInfo =
-    case Maybe.map2 readingToPercent plantInfo.sensor plantInfo.lastSensorReading of
-        Nothing ->
-            moistureBar 0 ""
-
-        Just percent ->
-            moistureBar percent (String.fromInt percent ++ "%")
-
-
-readingToPercent : Sensor -> SensorReading -> Int
-readingToPercent s r =
-    clamp 0 100 <|
-        100
-            * (r.value - s.min)
-            // (s.max - s.min)
-
-
-moistureBar : Int -> String -> Element Msg
-moistureBar percent title =
-    Element.row [ width fill, height (fill |> minimum 100) ]
-        [ Element.el
-            [ width (fill |> maximum 100)
-            , height fill
-            , alignRight
-            , centerY
-            , Border.width 1
-            , Background.gradient { angle = 0, steps = [ rgb255 91 58 0, rgb255 20 203 0 ] }
-            , behindContent (partialBar percent tileBGColor)
-            ]
-            (Element.el [ centerX, centerY ] (Element.text title))
-        ]
-
-
-partialBar : Int -> Color -> Element Msg
-partialBar percent backgroundColor =
-    Element.column [ width fill, height fill ]
-        [ Element.el [ width fill, height (fillPortion (100 - percent)), Background.color backgroundColor ] Element.none
-        , Element.el [ width fill, height (fillPortion percent) ] Element.none
-        ]
-
-
-motorLastWateredLabel : Time.Zone -> Time.Posix -> Maybe WaterGiven -> Element Msg
-motorLastWateredLabel zone time maybeWaterGiven =
-    Element.paragraph []
-        [ Element.text "Last watered: "
-        , Element.text (formatWaterGiven zone time maybeWaterGiven)
-        ]
-
-
-formatWaterGiven : Time.Zone -> Time.Posix -> Maybe WaterGiven -> String
-formatWaterGiven zone time maybeWaterGiven =
-    case maybeWaterGiven of
-        Nothing ->
-            "Never"
-
-        Just waterGiven ->
-            DateUtil.humaneTimeSince zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
-
-
-lastReadingLabel : Time.Zone -> Time.Posix -> Maybe Sensor -> Maybe SensorReading -> Element Msg
-lastReadingLabel zone time maybeSensor maybeSensorReading =
-    Element.paragraph []
-        [ Element.text "Last reading: "
-        , Element.text (formatSensorReading zone time maybeSensor maybeSensorReading)
-        ]
-
-
-formatSensorReading : Time.Zone -> Time.Posix -> Maybe Sensor -> Maybe SensorReading -> String
-formatSensorReading zone time maybeSensor maybeSensorReading =
-    case maybeSensorReading of
-        Nothing ->
-            "missing"
-
-        Just sensorReading ->
-            formatSensorReading2 maybeSensor sensorReading ++ " (" ++ humaneTimeSince zone time sensorReading.timestamp ++ ")"
-
-
-formatSensorReading2 : Maybe Sensor -> SensorReading -> String
-formatSensorReading2 maybeSensor sensorReading =
-    case maybeSensor of
-        Nothing ->
-            String.fromInt sensorReading.value
-
-        Just sensor ->
-            String.fromInt (clamp 0 100 (100 * (sensorReading.value - sensor.min) // (sensor.max - sensor.min))) ++ "%"
 
 
 signInButton =
