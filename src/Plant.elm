@@ -1,4 +1,15 @@
-module Plant exposing (Model, Msg, PlantInfo, init, update, updateMotors, updateSensor, updateSensorReading, updateWaterGiven, view)
+module Plant exposing
+    ( Model
+    , Msg
+    , PlantInfo
+    , QueryID
+    , decodeQueryID
+    , init
+    , motorsQuery
+    , queryIDToMessageDecoder
+    , update
+    , view
+    )
 
 import CollectionUtil exposing (..)
 import Constants exposing (..)
@@ -8,11 +19,13 @@ import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Motor exposing (Motor)
-import Sensor exposing (Sensor)
-import SensorReading exposing (SensorReading)
+import Json.Decode
+import Motor exposing (Motor, motorDecoder)
+import Query
+import Sensor exposing (Sensor, sensorDecoder)
+import SensorReading exposing (SensorReading, sensorReadingDecoder)
 import Time
-import WaterGiven exposing (WaterGiven)
+import WaterGiven exposing (WaterGiven, waterGivenDecoder)
 
 
 
@@ -35,6 +48,148 @@ type alias PlantInfo =
     }
 
 
+type QueryID
+    = MotorsQueryID
+    | SensorQueryID String
+    | LastWaterGivenQueryID String
+    | LastSensorReadingQueryID String
+
+
+motorsQuery : Query.Query
+motorsQuery =
+    { id = "motors"
+    , path = [ "motors" ]
+    , whereElements =
+        [ { field = "visible"
+          , op = "!="
+          , value = "false"
+          }
+        ]
+    , orderBy = Nothing
+    , limit = Just 10
+    , collectionGroup = True
+    }
+
+
+motorsQueryResponseDecoder =
+    motorDecoder
+        |> Json.Decode.field "data"
+        |> Json.Decode.list
+        |> Json.Decode.field "docs"
+        |> Json.Decode.map MotorsReceived
+
+
+queryForMotor : Motor -> List Query.Query
+queryForMotor motor =
+    [ lastWaterGivenQuery motor.nodeID motor.id
+    , sensorQuery motor.nodeID motor.triggerSensorId
+    , lastSensorReadingQuery motor.nodeID motor.triggerSensorId
+    ]
+
+
+queriesForMotors : List Motor -> List Query.Query
+queriesForMotors motors =
+    List.concatMap queryForMotor motors
+
+
+sensorQuery : String -> String -> Query.Query
+sensorQuery nodeID sensorID =
+    { id = Query.segmentsToQueryID [ "nodes", nodeID, "sensors", sensorID ]
+    , path = [ "nodes", nodeID, "sensors", sensorID ]
+    , whereElements = []
+    , orderBy = Nothing
+    , limit = Nothing
+    , collectionGroup = False
+    }
+
+
+sensorQueryResponseDecoder : String -> Json.Decode.Decoder Msg
+sensorQueryResponseDecoder sensorID =
+    sensorDecoder
+        |> Json.Decode.field "data"
+        |> Json.Decode.list
+        |> Json.Decode.field "docs"
+        |> Json.Decode.map List.head
+        |> Json.Decode.map (SensorReceived sensorID)
+
+
+lastWaterGivenQuery : String -> String -> Query.Query
+lastWaterGivenQuery nodeID motorID =
+    { id = Query.segmentsToQueryID [ "nodes", nodeID, "motors", motorID, "done-by-day", "last" ]
+    , path = [ "nodes", nodeID, "motors", motorID, "done-by-day" ]
+    , whereElements = []
+    , orderBy = Just { field = "start", dir = "desc" }
+    , limit = Just 1
+    , collectionGroup = False
+    }
+
+
+lastWaterGivenQueryResponseDecoder : String -> Json.Decode.Decoder Msg
+lastWaterGivenQueryResponseDecoder motorID =
+    waterGivenDecoder
+        |> Json.Decode.field "data"
+        |> Json.Decode.list
+        |> Json.Decode.field "docs"
+        |> Json.Decode.map List.head
+        |> Json.Decode.map (LastWaterGivenReceived motorID)
+
+
+lastSensorReadingQuery : String -> String -> Query.Query
+lastSensorReadingQuery nodeID sensorID =
+    { id = Query.segmentsToQueryID [ "nodes", nodeID, "sensors", sensorID, "readings", "last" ]
+    , path = [ "nodes", nodeID, "sensors", sensorID, "readings" ]
+    , whereElements = []
+    , orderBy = Just { field = "timestamp", dir = "desc" }
+    , limit = Just 1
+    , collectionGroup = False
+    }
+
+
+lastSensorReadingQueryResponseDecoder : String -> Json.Decode.Decoder Msg
+lastSensorReadingQueryResponseDecoder sensorID =
+    sensorReadingDecoder
+        |> Json.Decode.field "data"
+        |> Json.Decode.list
+        |> Json.Decode.field "docs"
+        |> Json.Decode.map List.head
+        |> Json.Decode.map (LastSensorReadingReceived sensorID)
+
+
+decodeQueryID : List String -> Maybe QueryID
+decodeQueryID segments =
+    case segments of
+        [ "motors" ] ->
+            Just MotorsQueryID
+
+        [ "nodes", _, "sensors", sensorID ] ->
+            Just <| SensorQueryID sensorID
+
+        [ "nodes", _, "motors", motorID, "done-by-day", "last" ] ->
+            Just <| LastWaterGivenQueryID motorID
+
+        [ "nodes", _, "sensors", sensorID, "readings", "last" ] ->
+            Just <| LastSensorReadingQueryID sensorID
+
+        _ ->
+            Nothing
+
+
+queryIDToMessageDecoder : QueryID -> Json.Decode.Decoder Msg
+queryIDToMessageDecoder queryID =
+    case queryID of
+        MotorsQueryID ->
+            motorsQueryResponseDecoder
+
+        SensorQueryID sensorID ->
+            sensorQueryResponseDecoder sensorID
+
+        LastWaterGivenQueryID motorID ->
+            lastWaterGivenQueryResponseDecoder motorID
+
+        LastSensorReadingQueryID sensorID ->
+            lastSensorReadingQueryResponseDecoder sensorID
+
+
 init : Model
 init =
     { motors = Dict.empty
@@ -49,14 +204,34 @@ init =
 
 
 type Msg
-    = NoOp
+    = MotorsReceived (List Motor)
+    | SensorReceived String (Maybe Sensor)
+    | LastWaterGivenReceived String (Maybe WaterGiven)
+    | LastSensorReadingReceived String (Maybe SensorReading)
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, List Query.Query )
 update msg model =
     case msg of
-        NoOp ->
-            model
+        MotorsReceived motors ->
+            ( updateMotors motors model
+            , queriesForMotors motors
+            )
+
+        SensorReceived sensorID maybeSensor ->
+            ( updateSensor sensorID maybeSensor model
+            , []
+            )
+
+        LastWaterGivenReceived motorID maybeWaterGiven ->
+            ( updateWaterGiven motorID maybeWaterGiven model
+            , []
+            )
+
+        LastSensorReadingReceived sensorID maybeSensorReading ->
+            ( updateSensorReading sensorID maybeSensorReading model
+            , []
+            )
 
 
 updateMotors : List Motor -> Model -> Model

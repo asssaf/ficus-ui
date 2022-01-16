@@ -46,6 +46,27 @@ type alias Snapshot =
     }
 
 
+mapQueryID : (String -> String) -> Query -> Query
+mapQueryID m q =
+    { q | id = m q.id }
+
+
+segmentsToQueryID : List String -> String
+segmentsToQueryID =
+    String.join "/"
+
+
+queryIDToSegments : String -> List String
+queryIDToSegments id =
+    String.split "/" id
+        |> List.filter (\s -> s /= "")
+
+
+prefixQueryID : String -> String -> String
+prefixQueryID prefix queryID =
+    prefix ++ "/" ++ queryID
+
+
 snapshotDecoder : Json.Decode.Decoder Snapshot
 snapshotDecoder =
     Json.Decode.map2 Snapshot

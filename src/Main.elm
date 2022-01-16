@@ -9,16 +9,12 @@ import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
 import Json.Decode exposing (..)
-import Motor exposing (Motor, motorDecoder)
 import Plant
 import Query
 import Result.Extra as Result
-import Sensor exposing (Sensor, sensorDecoder)
-import SensorReading exposing (SensorReading, sensorReadingDecoder)
 import Task
 import Time
 import Url
-import WaterGiven exposing (WaterGiven, waterGivenDecoder)
 
 
 
@@ -96,6 +92,11 @@ type alias Node =
     }
 
 
+type QueryID
+    = NodesQueryID
+    | PlantQueryID Plant.QueryID
+
+
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     ( { key = key
@@ -123,81 +124,19 @@ initCmd flags =
             Cmd.batch
                 [ Task.perform AdjustTimeZone Time.here
                 , sendQuery nodeQuery
-                , sendQuery motorQuery
+                , sendQuery Plant.motorsQuery
                 ]
 
 
 nodeQuery : Query.Query
 nodeQuery =
-    { id = "nodes"
+    { id = Query.segmentsToQueryID [ "nodes" ]
     , path = [ "nodes" ]
     , whereElements = []
     , orderBy = Nothing
     , limit = Just 10
     , collectionGroup = False
     }
-
-
-motorQuery : Query.Query
-motorQuery =
-    { id = "motors"
-    , path = [ "motors" ]
-    , whereElements =
-        [ { field = "visible"
-          , op = "!="
-          , value = "false"
-          }
-        ]
-    , orderBy = Nothing
-    , limit = Just 10
-    , collectionGroup = True
-    }
-
-
-sensorQuery : String -> String -> Query.Query
-sensorQuery nodeID sensorID =
-    { id = "nodes/" ++ nodeID ++ "/sensors/" ++ sensorID
-    , path = [ "nodes", nodeID, "sensors", sensorID ]
-    , whereElements = []
-    , orderBy = Nothing
-    , limit = Nothing
-    , collectionGroup = False
-    }
-
-
-lastDoneByDayQuery : String -> String -> Query.Query
-lastDoneByDayQuery nodeID motorID =
-    { id = "nodes/" ++ nodeID ++ "/motors/" ++ motorID ++ "/done-by-day/last"
-    , path = [ "nodes", nodeID, "motors", motorID, "done-by-day" ]
-    , whereElements = []
-    , orderBy = Just { field = "start", dir = "desc" }
-    , limit = Just 1
-    , collectionGroup = False
-    }
-
-
-lastSensorReadingQuery : String -> String -> Query.Query
-lastSensorReadingQuery nodeID sensorID =
-    { id = "nodes/" ++ nodeID ++ "/sensors/" ++ sensorID ++ "/readings/last"
-    , path = [ "nodes", nodeID, "sensors", sensorID, "readings" ]
-    , whereElements = []
-    , orderBy = Just { field = "timestamp", dir = "desc" }
-    , limit = Just 1
-    , collectionGroup = False
-    }
-
-
-queryForMotor : Motor -> List Query.Query
-queryForMotor motor =
-    [ lastDoneByDayQuery motor.nodeID motor.id
-    , sensorQuery motor.nodeID motor.triggerSensorId
-    , lastSensorReadingQuery motor.nodeID motor.triggerSensorId
-    ]
-
-
-queriesForMotors : List Motor -> List Query.Query
-queriesForMotors motors =
-    List.concatMap queryForMotor motors
 
 
 
@@ -217,10 +156,6 @@ type Msg
     | ErrorParsingResponse String
     | QueryResponseReceived Json.Decode.Value
     | NodesReceived (List Node)
-    | MotorsReceived (List Motor)
-    | SensorReceived String (Maybe Sensor)
-    | LastWaterGivenReceived String (Maybe WaterGiven)
-    | LastSensorReadingReceived String (Maybe SensorReading)
     | PlantMsg Plant.Msg
 
 
@@ -291,31 +226,14 @@ update msg model =
             , Cmd.none
             )
 
-        MotorsReceived motors ->
-            ( { model | plants = Plant.updateMotors motors model.plants }
-            , Cmd.batch <|
-                List.map sendQuery <|
-                    queriesForMotors motors
-            )
-
-        SensorReceived sensorID maybeSensor ->
-            ( { model | plants = Plant.updateSensor sensorID maybeSensor model.plants }
-            , Cmd.none
-            )
-
-        LastWaterGivenReceived motorID maybeWaterGiven ->
-            ( { model | plants = Plant.updateWaterGiven motorID maybeWaterGiven model.plants }
-            , Cmd.none
-            )
-
-        LastSensorReadingReceived sensorID maybeSensorReading ->
-            ( { model | plants = Plant.updateSensorReading sensorID maybeSensorReading model.plants }
-            , Cmd.none
-            )
-
         PlantMsg plantMsg ->
-            ( { model | plants = Plant.update plantMsg model.plants }
-            , Cmd.none
+            let
+                ( plants, queries ) =
+                    Plant.update plantMsg model.plants
+            in
+            ( { model | plants = plants }
+            , Cmd.batch <|
+                List.map sendQuery queries
             )
 
 
@@ -356,53 +274,57 @@ queryResponseDecoder =
 
 snapshotToMessageDecoder : Query.Snapshot -> Json.Decode.Decoder Msg
 snapshotToMessageDecoder snapshot =
-    case queryIDToSegments snapshot.id of
+    case decodeQueryID snapshot.id of
+        Nothing ->
+            Json.Decode.fail <| "unknown query id: " ++ snapshot.id
+
+        Just queryID ->
+            queryIDToMessageDecoder queryID
+
+
+decodeQueryID : String -> Maybe QueryID
+decodeQueryID queryID =
+    let
+        segments =
+            Query.queryIDToSegments queryID
+
+        decoders =
+            [ mainDecodeQueryID
+            , Plant.decodeQueryID >> Maybe.map PlantQueryID
+            ]
+    in
+    List.filterMap (\dec -> dec segments) decoders
+        |> List.head
+
+
+queryIDToMessageDecoder : QueryID -> Json.Decode.Decoder Msg
+queryIDToMessageDecoder queryID =
+    case queryID of
+        NodesQueryID ->
+            nodesQueryResponseDecoder
+
+        PlantQueryID plantQueryID ->
+            Plant.queryIDToMessageDecoder plantQueryID
+                |> Json.Decode.map PlantMsg
+
+
+mainDecodeQueryID : List String -> Maybe QueryID
+mainDecodeQueryID segments =
+    case segments of
         [ "nodes" ] ->
-            nodeDecoder
-                |> Json.Decode.field "data"
-                |> Json.Decode.list
-                |> Json.Decode.field "docs"
-                |> Json.Decode.map NodesReceived
-
-        [ "motors" ] ->
-            motorDecoder
-                |> Json.Decode.field "data"
-                |> Json.Decode.list
-                |> Json.Decode.field "docs"
-                |> Json.Decode.map MotorsReceived
-
-        [ "nodes", _, "sensors", sensorID ] ->
-            sensorDecoder
-                |> Json.Decode.field "data"
-                |> Json.Decode.list
-                |> Json.Decode.field "docs"
-                |> Json.Decode.map List.head
-                |> Json.Decode.map (SensorReceived sensorID)
-
-        [ "nodes", _, "motors", motorID, "done-by-day", "last" ] ->
-            waterGivenDecoder
-                |> Json.Decode.field "data"
-                |> Json.Decode.list
-                |> Json.Decode.field "docs"
-                |> Json.Decode.map List.head
-                |> Json.Decode.map (LastWaterGivenReceived motorID)
-
-        [ "nodes", _, "sensors", sensorID, "readings", "last" ] ->
-            sensorReadingDecoder
-                |> Json.Decode.field "data"
-                |> Json.Decode.list
-                |> Json.Decode.field "docs"
-                |> Json.Decode.map List.head
-                |> Json.Decode.map (LastSensorReadingReceived sensorID)
+            Just NodesQueryID
 
         _ ->
-            Json.Decode.fail ("unknown query id: " ++ snapshot.id)
+            Nothing
 
 
-queryIDToSegments : String -> List String
-queryIDToSegments id =
-    String.split "/" id
-        |> List.filter (\s -> s /= "")
+nodesQueryResponseDecoder : Json.Decode.Decoder Msg
+nodesQueryResponseDecoder =
+    nodeDecoder
+        |> Json.Decode.field "data"
+        |> Json.Decode.list
+        |> Json.Decode.field "docs"
+        |> Json.Decode.map NodesReceived
 
 
 nodeDecoder : Json.Decode.Decoder Node
