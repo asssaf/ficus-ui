@@ -64,12 +64,19 @@ type alias LogItem =
 type alias Model =
     { key : Nav.Key
     , url : Url.Url
-    , flags : Flags
+    , user : Maybe User
+    , screen : ScreenModel
     , zone : Time.Zone
     , time : Time.Posix
     , err : Maybe String
     , nodes : List Node
     , plants : Plant.Model
+    }
+
+
+type alias ScreenModel =
+    { width : Int
+    , height : Int
     }
 
 
@@ -93,7 +100,8 @@ init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     ( { key = key
       , url = url
-      , flags = flags
+      , user = flags.user
+      , screen = { width = flags.width, height = flags.height }
       , zone = Time.utc
       , time = Time.millisToPosix 0
       , err = Nothing
@@ -178,7 +186,7 @@ update msg model =
             )
 
         Resized w h ->
-            ( { model | flags = setSize w h model.flags }
+            ( { model | screen = setSize w h model.screen }
             , Cmd.none
             )
 
@@ -229,9 +237,9 @@ update msg model =
             )
 
 
-setSize : Int -> Int -> Flags -> Flags
-setSize w h flags =
-    { flags | width = w, height = h }
+setSize : Int -> Int -> ScreenModel -> ScreenModel
+setSize w h screen =
+    { screen | width = w, height = h }
 
 
 decodeLogItemAndExtract : Json.Decode.Value -> Msg
@@ -346,7 +354,7 @@ subscriptions _ =
 
 view : Model -> Browser.Document Msg
 view model =
-    case model.flags.user of
+    case model.user of
         Nothing ->
             loginView model
 
@@ -358,7 +366,7 @@ loginView : Model -> Browser.Document Msg
 loginView model =
     { title = "Ficus"
     , body =
-        [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
+        [ Element.layout [ width (px model.screen.width), height (px model.screen.height) ] <|
             Element.map LoginMsg <|
                 Login.view
         ]
@@ -369,7 +377,7 @@ mainView : Model -> Browser.Document Msg
 mainView model =
     { title = "Ficus"
     , body =
-        [ Element.layout [ width (px model.flags.width), height (px model.flags.height) ] <|
+        [ Element.layout [ width (px model.screen.width), height (px model.screen.height) ] <|
             Element.column [ width fill, height fill, spacing 20 ]
                 [ Header.view |> Element.map HeaderMsg
                 , errView model.err
