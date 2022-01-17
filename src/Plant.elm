@@ -5,7 +5,7 @@ module Plant exposing
     , QueryID
     , decodeQueryID
     , init
-    , motorsQuery
+    , initQueries
     , queryIDToMessageDecoder
     , update
     , view
@@ -21,6 +21,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Json.Decode
 import Motor exposing (Motor, motorDecoder)
+import Node exposing (Node, nodeDecoder)
 import Query
 import Sensor exposing (Sensor, sensorDecoder)
 import SensorReading exposing (SensorReading, sensorReadingDecoder)
@@ -33,7 +34,8 @@ import WaterGiven exposing (WaterGiven, waterGivenDecoder)
 
 
 type alias Model =
-    { motors : Dict String Motor
+    { nodes : Dict String Node
+    , motors : Dict String Motor
     , sensors : Dict String Sensor
     , lastWaterGivens : Dict String WaterGiven
     , lastSensorReadings : Dict String SensorReading
@@ -49,10 +51,31 @@ type alias PlantInfo =
 
 
 type QueryID
-    = MotorsQueryID
+    = NodesQueryID
+    | MotorsQueryID
     | SensorQueryID String
     | LastWaterGivenQueryID String
     | LastSensorReadingQueryID String
+
+
+nodesQuery : Query.Query
+nodesQuery =
+    { id = Query.segmentsToQueryID [ "nodes" ]
+    , path = [ "nodes" ]
+    , whereElements = []
+    , orderBy = Nothing
+    , limit = Just 10
+    , collectionGroup = False
+    }
+
+
+nodesQueryResponseDecoder : Json.Decode.Decoder Msg
+nodesQueryResponseDecoder =
+    nodeDecoder
+        |> Json.Decode.field "data"
+        |> Json.Decode.list
+        |> Json.Decode.field "docs"
+        |> Json.Decode.map NodesReceived
 
 
 motorsQuery : Query.Query
@@ -158,6 +181,9 @@ lastSensorReadingQueryResponseDecoder sensorID =
 decodeQueryID : List String -> Maybe QueryID
 decodeQueryID segments =
     case segments of
+        [ "nodes" ] ->
+            Just NodesQueryID
+
         [ "motors" ] ->
             Just MotorsQueryID
 
@@ -177,6 +203,9 @@ decodeQueryID segments =
 queryIDToMessageDecoder : QueryID -> Json.Decode.Decoder Msg
 queryIDToMessageDecoder queryID =
     case queryID of
+        NodesQueryID ->
+            nodesQueryResponseDecoder
+
         MotorsQueryID ->
             motorsQueryResponseDecoder
 
@@ -192,11 +221,19 @@ queryIDToMessageDecoder queryID =
 
 init : Model
 init =
-    { motors = Dict.empty
+    { nodes = Dict.empty
+    , motors = Dict.empty
     , sensors = Dict.empty
     , lastWaterGivens = Dict.empty
     , lastSensorReadings = Dict.empty
     }
+
+
+initQueries : List Query.Query
+initQueries =
+    [ nodesQuery
+    , motorsQuery
+    ]
 
 
 
@@ -204,7 +241,8 @@ init =
 
 
 type Msg
-    = MotorsReceived (List Motor)
+    = NodesReceived (List Node)
+    | MotorsReceived (List Motor)
     | SensorReceived String (Maybe Sensor)
     | LastWaterGivenReceived String (Maybe WaterGiven)
     | LastSensorReadingReceived String (Maybe SensorReading)
@@ -213,6 +251,11 @@ type Msg
 update : Msg -> Model -> ( Model, List Query.Query )
 update msg model =
     case msg of
+        NodesReceived nodes ->
+            ( updateNodes nodes model
+            , []
+            )
+
         MotorsReceived motors ->
             ( updateMotors motors model
             , queriesForMotors motors
@@ -232,6 +275,16 @@ update msg model =
             ( updateSensorReading sensorID maybeSensorReading model
             , []
             )
+
+
+updateNodes : List Node -> Model -> Model
+updateNodes nodesList model =
+    let
+        nodes =
+            Dict.fromList <|
+                List.map (\n -> ( n.id, n )) nodesList
+    in
+    { model | nodes = nodes }
 
 
 updateMotors : List Motor -> Model -> Model
