@@ -6,6 +6,7 @@ import Browser.Navigation as Nav
 import Element exposing (..)
 import Header
 import Json.Decode exposing (..)
+import Log
 import Login
 import Plant
 import Query
@@ -35,9 +36,6 @@ main =
 -- PORTS
 
 
-port logReceiver : (Json.Decode.Value -> msg) -> Sub msg
-
-
 port sendQuery : Query.Query -> Cmd msg
 
 
@@ -55,12 +53,6 @@ type alias Flags =
     }
 
 
-type alias LogItem =
-    { message : String
-    , level : String
-    }
-
-
 type alias Model =
     { key : Nav.Key
     , url : Url.Url
@@ -68,7 +60,7 @@ type alias Model =
     , screen : ScreenModel
     , zone : Time.Zone
     , time : Time.Posix
-    , err : Maybe String
+    , log : Log.Model
     , nodes : List Node
     , plants : Plant.Model
     }
@@ -104,7 +96,7 @@ init flags url key =
       , screen = { width = flags.width, height = flags.height }
       , zone = Time.utc
       , time = Time.millisToPosix 0
-      , err = Nothing
+      , log = Log.init
       , nodes = []
       , plants = Plant.init
       }
@@ -149,11 +141,9 @@ type Msg
     | Tick Time.Posix
     | AdjustTimeZone Time.Zone
     | Resized Int Int
-    | LogItemReceived Json.Decode.Value
-    | LogItemAdded LogItem
-    | ErrorParsingResponse String
     | QueryResponseReceived Json.Decode.Value
     | NodesReceived (List Node)
+    | LogMsg Log.Msg
     | LoginMsg Login.Msg
     | HeaderMsg Header.Msg
     | PlantMsg Plant.Msg
@@ -190,26 +180,8 @@ update msg model =
             , Cmd.none
             )
 
-        LogItemReceived logItem ->
-            update (decodeLogItemAndExtract logItem) model
-
-        LogItemAdded logItem ->
-            case logItem.level of
-                "error" ->
-                    update (ErrorParsingResponse logItem.message) model
-
-                _ ->
-                    ( model
-                    , Cmd.none
-                    )
-
         QueryResponseReceived response ->
             update (decodeQueryResponseAndExtract response) model
-
-        ErrorParsingResponse err ->
-            ( { model | err = Just err }
-            , Cmd.none
-            )
 
         NodesReceived nodes ->
             ( { model | nodes = nodes }
@@ -219,6 +191,11 @@ update msg model =
         HeaderMsg headerMsg ->
             ( model
             , Header.update headerMsg
+            )
+
+        LogMsg logMsg ->
+            ( { model | log = Log.update logMsg model.log }
+            , Cmd.none
             )
 
         LoginMsg loginMsg ->
@@ -242,20 +219,6 @@ setSize w h screen =
     { screen | width = w, height = h }
 
 
-decodeLogItemAndExtract : Json.Decode.Value -> Msg
-decodeLogItemAndExtract response =
-    Json.Decode.decodeValue logItemDecoder response
-        |> Result.map LogItemAdded
-        |> Result.extract parseErrorToMessage
-
-
-logItemDecoder : Json.Decode.Decoder LogItem
-logItemDecoder =
-    Json.Decode.map2 LogItem
-        (field "message" Json.Decode.string)
-        (field "level" Json.Decode.string)
-
-
 decodeQueryResponseAndExtract : Json.Decode.Value -> Msg
 decodeQueryResponseAndExtract response =
     Json.Decode.decodeValue queryResponseDecoder response
@@ -264,7 +227,7 @@ decodeQueryResponseAndExtract response =
 
 parseErrorToMessage : Json.Decode.Error -> Msg
 parseErrorToMessage err =
-    ErrorParsingResponse (Json.Decode.errorToString err)
+    LogMsg <| Log.ErrorOccurred <| Json.Decode.errorToString err
 
 
 queryResponseDecoder : Json.Decode.Decoder Msg
@@ -339,12 +302,12 @@ nodeDecoder =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
+subscriptions model =
     Sub.batch
         [ Time.every 1000 Tick
         , Browser.Events.onResize (\w h -> Resized w h)
-        , logReceiver LogItemReceived
         , queryResponseReceiver QueryResponseReceived
+        , Log.subscriptions model.log |> Sub.map LogMsg
         ]
 
 
@@ -380,19 +343,10 @@ mainView model =
         [ Element.layout [ width (px model.screen.width), height (px model.screen.height) ] <|
             Element.column [ width fill, height fill, spacing 20 ]
                 [ Header.view |> Element.map HeaderMsg
-                , errView model.err
+                , Log.view model.log
+                    |> Element.map LogMsg
                 , Plant.view model.zone model.time model.plants
                     |> Element.map PlantMsg
                 ]
         ]
     }
-
-
-errView : Maybe String -> Element Msg
-errView maybeErr =
-    case maybeErr of
-        Nothing ->
-            Element.none
-
-        Just err ->
-            Element.text err
