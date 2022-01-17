@@ -47,7 +47,7 @@ port queryResponseReceiver : (Json.Decode.Value -> msg) -> Sub msg
 
 
 type alias Flags =
-    { user : Maybe User
+    { user : Maybe UserInfo
     , width : Int
     , height : Int
     }
@@ -56,7 +56,7 @@ type alias Flags =
 type alias Model =
     { key : Nav.Key
     , url : Url.Url
-    , user : Maybe User
+    , user : User
     , screen : ScreenModel
     , zone : Time.Zone
     , time : Time.Posix
@@ -71,7 +71,12 @@ type alias ScreenModel =
     }
 
 
-type alias User =
+type User
+    = SignedOut
+    | SignedIn UserInfo
+
+
+type alias UserInfo =
     { uid : String
     }
 
@@ -84,7 +89,7 @@ init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     ( { key = key
       , url = url
-      , user = flags.user
+      , user = Maybe.withDefault SignedOut <| Maybe.map SignedIn flags.user
       , screen = { width = flags.width, height = flags.height }
       , zone = Time.utc
       , time = Time.millisToPosix 0
@@ -262,11 +267,11 @@ subscriptions model =
 view : Model -> Browser.Document Msg
 view model =
     case model.user of
-        Nothing ->
+        SignedOut ->
             loginView model
 
-        Just _ ->
-            mainView model
+        SignedIn user ->
+            mainView user model
 
 
 loginView : Model -> Browser.Document Msg
@@ -280,8 +285,8 @@ loginView model =
     }
 
 
-mainView : Model -> Browser.Document Msg
-mainView model =
+mainView : UserInfo -> Model -> Browser.Document Msg
+mainView _ model =
     { title = "Ficus"
     , body =
         [ Element.layout [ width (px model.screen.width), height (px model.screen.height) ] <|
