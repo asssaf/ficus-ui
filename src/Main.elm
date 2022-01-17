@@ -5,7 +5,7 @@ import Browser.Events
 import Browser.Navigation as Nav
 import Element exposing (..)
 import Header
-import Json.Decode exposing (..)
+import Json.Decode
 import Log
 import Login
 import Plant
@@ -61,7 +61,6 @@ type alias Model =
     , zone : Time.Zone
     , time : Time.Posix
     , log : Log.Model
-    , nodes : List Node
     , plants : Plant.Model
     }
 
@@ -77,15 +76,8 @@ type alias User =
     }
 
 
-type alias Node =
-    { id : String
-    , name : String
-    }
-
-
 type QueryID
-    = NodesQueryID
-    | PlantQueryID Plant.QueryID
+    = PlantQueryID Plant.QueryID
 
 
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -97,7 +89,6 @@ init flags url key =
       , zone = Time.utc
       , time = Time.millisToPosix 0
       , log = Log.init
-      , nodes = []
       , plants = Plant.init
       }
     , initCmd flags
@@ -113,22 +104,12 @@ initCmd flags =
                 ]
 
         Just _ ->
-            Cmd.batch
-                [ Task.perform AdjustTimeZone Time.here
-                , sendQuery nodeQuery
-                , sendQuery Plant.motorsQuery
-                ]
-
-
-nodeQuery : Query.Query
-nodeQuery =
-    { id = Query.segmentsToQueryID [ "nodes" ]
-    , path = [ "nodes" ]
-    , whereElements = []
-    , orderBy = Nothing
-    , limit = Just 10
-    , collectionGroup = False
-    }
+            Cmd.batch <|
+                List.concat
+                    [ [ Task.perform AdjustTimeZone Time.here
+                      ]
+                    , List.map sendQuery Plant.initQueries
+                    ]
 
 
 
@@ -142,7 +123,6 @@ type Msg
     | AdjustTimeZone Time.Zone
     | Resized Int Int
     | QueryResponseReceived Json.Decode.Value
-    | NodesReceived (List Node)
     | LogMsg Log.Msg
     | LoginMsg Login.Msg
     | HeaderMsg Header.Msg
@@ -182,11 +162,6 @@ update msg model =
 
         QueryResponseReceived response ->
             update (decodeQueryResponseAndExtract response) model
-
-        NodesReceived nodes ->
-            ( { model | nodes = nodes }
-            , Cmd.none
-            )
 
         HeaderMsg headerMsg ->
             ( model
@@ -252,9 +227,7 @@ decodeQueryID queryID =
             Query.queryIDToSegments queryID
 
         decoders =
-            [ mainDecodeQueryID
-            , Plant.decodeQueryID >> Maybe.map PlantQueryID
-            ]
+            [ Plant.decodeQueryID >> Maybe.map PlantQueryID ]
     in
     List.filterMap (\dec -> dec segments) decoders
         |> List.head
@@ -263,38 +236,9 @@ decodeQueryID queryID =
 queryIDToMessageDecoder : QueryID -> Json.Decode.Decoder Msg
 queryIDToMessageDecoder queryID =
     case queryID of
-        NodesQueryID ->
-            nodesQueryResponseDecoder
-
         PlantQueryID plantQueryID ->
             Plant.queryIDToMessageDecoder plantQueryID
                 |> Json.Decode.map PlantMsg
-
-
-mainDecodeQueryID : List String -> Maybe QueryID
-mainDecodeQueryID segments =
-    case segments of
-        [ "nodes" ] ->
-            Just NodesQueryID
-
-        _ ->
-            Nothing
-
-
-nodesQueryResponseDecoder : Json.Decode.Decoder Msg
-nodesQueryResponseDecoder =
-    nodeDecoder
-        |> Json.Decode.field "data"
-        |> Json.Decode.list
-        |> Json.Decode.field "docs"
-        |> Json.Decode.map NodesReceived
-
-
-nodeDecoder : Json.Decode.Decoder Node
-nodeDecoder =
-    Json.Decode.map2 Node
-        (field "id" Json.Decode.string)
-        (field "name" Json.Decode.string)
 
 
 
