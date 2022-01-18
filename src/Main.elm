@@ -74,6 +74,7 @@ type alias ScreenModel =
 type User
     = SignedOut
     | SignedIn UserInfo
+    | SigningOut
 
 
 type alias UserInfo =
@@ -169,9 +170,11 @@ update msg model =
             update (decodeQueryResponseAndExtract response) model
 
         HeaderMsg headerMsg ->
-            ( model
-            , Header.update headerMsg
-            )
+            case headerMsg of
+                Header.SignOut ->
+                    ( { model | user = SigningOut }
+                    , Header.update headerMsg
+                    )
 
         LogMsg logMsg ->
             ( { model | log = Log.update logMsg model.log }
@@ -273,6 +276,9 @@ view model =
         SignedIn user ->
             mainView user model
 
+        SigningOut ->
+            signingOutView model
+
 
 loginView : Model -> Browser.Document Msg
 loginView model =
@@ -281,6 +287,17 @@ loginView model =
         [ Element.layout [ width (px model.screen.width), height (px model.screen.height) ] <|
             Element.map LoginMsg <|
                 Login.view
+        ]
+    }
+
+
+signingOutView : Model -> Browser.Document Msg
+signingOutView model =
+    { title = "Ficus"
+    , body =
+        [ Element.layout [ width (px model.screen.width), height (px model.screen.height) ] <|
+            Element.el [ width fill, height fill ] <|
+                Element.el [ centerX, centerY ] (Element.text "Signing out...")
         ]
     }
 
