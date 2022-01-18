@@ -1,4 +1,4 @@
-port module Header exposing (Msg, update, view)
+port module Header exposing (Msg(..), update, view)
 
 import Constants exposing (..)
 import Element exposing (..)
