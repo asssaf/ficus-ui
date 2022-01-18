@@ -37,7 +37,7 @@ type alias Model =
     { nodes : Dict String Node
     , motors : Dict String Motor
     , sensors : Dict String Sensor
-    , lastWaterGivens : Dict String WaterGiven
+    , latestWaterGivens : Dict String (List WaterGiven)
     , lastSensorReadings : Dict String SensorReading
     }
 
@@ -45,7 +45,7 @@ type alias Model =
 type alias PlantInfo =
     { motor : Motor
     , sensor : Maybe Sensor
-    , lastWaterGiven : Maybe WaterGiven
+    , latestWaterGivens : List WaterGiven
     , lastSensorReading : Maybe SensorReading
     }
 
@@ -54,7 +54,7 @@ type QueryID
     = NodesQueryID
     | MotorsQueryID
     | SensorQueryID String
-    | LastWaterGivenQueryID String
+    | LatestWaterGivensQueryID String
     | LastSensorReadingQueryID String
 
 
@@ -104,7 +104,7 @@ motorsQueryResponseDecoder =
 
 queryForMotor : Motor -> List Query.Query
 queryForMotor motor =
-    [ lastWaterGivenQuery motor.nodeID motor.id
+    [ latestWaterGivensQuery motor.nodeID motor.id
     , sensorQuery motor.nodeID motor.triggerSensorId
     , lastSensorReadingQuery motor.nodeID motor.triggerSensorId
     ]
@@ -136,25 +136,24 @@ sensorQueryResponseDecoder sensorID =
         |> Json.Decode.map (SensorReceived sensorID)
 
 
-lastWaterGivenQuery : String -> String -> Query.Query
-lastWaterGivenQuery nodeID motorID =
-    { id = Query.segmentsToQueryID [ "nodes", nodeID, "motors", motorID, "done-by-day", "last" ]
+latestWaterGivensQuery : String -> String -> Query.Query
+latestWaterGivensQuery nodeID motorID =
+    { id = Query.segmentsToQueryID [ "nodes", nodeID, "motors", motorID, "done-by-day", "latest" ]
     , path = [ "nodes", nodeID, "motors", motorID, "done-by-day" ]
     , whereElements = []
     , orderBy = Just { field = "start", dir = "desc" }
-    , limit = Just 1
+    , limit = Just 3
     , collectionGroup = False
     }
 
 
-lastWaterGivenQueryResponseDecoder : String -> Json.Decode.Decoder Msg
-lastWaterGivenQueryResponseDecoder motorID =
+latestWaterGivensQueryResponseDecoder : String -> Json.Decode.Decoder Msg
+latestWaterGivensQueryResponseDecoder motorID =
     waterGivenDecoder
         |> Json.Decode.field "data"
         |> Json.Decode.list
         |> Json.Decode.field "docs"
-        |> Json.Decode.map List.head
-        |> Json.Decode.map (LastWaterGivenReceived motorID)
+        |> Json.Decode.map (LatestWaterGivensReceived motorID)
 
 
 lastSensorReadingQuery : String -> String -> Query.Query
@@ -190,8 +189,8 @@ decodeQueryID segments =
         [ "nodes", _, "sensors", sensorID ] ->
             Just <| SensorQueryID sensorID
 
-        [ "nodes", _, "motors", motorID, "done-by-day", "last" ] ->
-            Just <| LastWaterGivenQueryID motorID
+        [ "nodes", _, "motors", motorID, "done-by-day", "latest" ] ->
+            Just <| LatestWaterGivensQueryID motorID
 
         [ "nodes", _, "sensors", sensorID, "readings", "last" ] ->
             Just <| LastSensorReadingQueryID sensorID
@@ -212,8 +211,8 @@ queryIDToMessageDecoder queryID =
         SensorQueryID sensorID ->
             sensorQueryResponseDecoder sensorID
 
-        LastWaterGivenQueryID motorID ->
-            lastWaterGivenQueryResponseDecoder motorID
+        LatestWaterGivensQueryID motorID ->
+            latestWaterGivensQueryResponseDecoder motorID
 
         LastSensorReadingQueryID sensorID ->
             lastSensorReadingQueryResponseDecoder sensorID
@@ -224,7 +223,7 @@ init =
     { nodes = Dict.empty
     , motors = Dict.empty
     , sensors = Dict.empty
-    , lastWaterGivens = Dict.empty
+    , latestWaterGivens = Dict.empty
     , lastSensorReadings = Dict.empty
     }
 
@@ -244,7 +243,7 @@ type Msg
     = NodesReceived (List Node)
     | MotorsReceived (List Motor)
     | SensorReceived String (Maybe Sensor)
-    | LastWaterGivenReceived String (Maybe WaterGiven)
+    | LatestWaterGivensReceived String (List WaterGiven)
     | LastSensorReadingReceived String (Maybe SensorReading)
 
 
@@ -266,8 +265,8 @@ update msg model =
             , []
             )
 
-        LastWaterGivenReceived motorID maybeWaterGiven ->
-            ( updateWaterGiven motorID maybeWaterGiven model
+        LatestWaterGivensReceived motorID waterGivens ->
+            ( updateWaterGivens motorID waterGivens model
             , []
             )
 
@@ -302,9 +301,9 @@ updateSensor sensorID maybeSensor model =
     { model | sensors = Dict.update sensorID (\_ -> maybeSensor) model.sensors }
 
 
-updateWaterGiven : String -> Maybe WaterGiven -> Model -> Model
-updateWaterGiven motorID maybeWaterGiven model =
-    { model | lastWaterGivens = Dict.update motorID (\_ -> maybeWaterGiven) model.lastWaterGivens }
+updateWaterGivens : String -> List WaterGiven -> Model -> Model
+updateWaterGivens motorID waterGivens model =
+    { model | latestWaterGivens = Dict.update motorID (\_ -> Just waterGivens) model.latestWaterGivens }
 
 
 updateSensorReading : String -> Maybe SensorReading -> Model -> Model
@@ -320,7 +319,7 @@ modelToPlantInfos model =
 motorToPlantInfo motor model =
     { motor = motor
     , sensor = Dict.get motor.triggerSensorId model.sensors
-    , lastWaterGiven = Dict.get motor.id model.lastWaterGivens
+    , latestWaterGivens = Maybe.withDefault [] <| Dict.get motor.id model.latestWaterGivens
     , lastSensorReading = Dict.get motor.triggerSensorId model.lastSensorReadings
     }
 
@@ -381,7 +380,7 @@ plantViewBody zone time plantInfo =
 plantViewBodyLeft : Time.Zone -> Time.Posix -> PlantInfo -> Element Msg
 plantViewBodyLeft zone time plantInfo =
     Element.column [ spacing 5 ]
-        [ motorLastWateredLabel zone time plantInfo.lastWaterGiven
+        [ motorLastWateredLabel zone time plantInfo.latestWaterGivens
         , lastReadingLabel zone time plantInfo.sensor plantInfo.lastSensorReading
         ]
 
@@ -428,22 +427,19 @@ partialBar percent backgroundColor =
         ]
 
 
-motorLastWateredLabel : Time.Zone -> Time.Posix -> Maybe WaterGiven -> Element Msg
-motorLastWateredLabel zone time maybeWaterGiven =
-    Element.paragraph []
-        [ Element.text "Last watered: "
-        , Element.text (formatWaterGiven zone time maybeWaterGiven)
+motorLastWateredLabel : Time.Zone -> Time.Posix -> List WaterGiven -> Element Msg
+motorLastWateredLabel zone time waterGivens =
+    Element.row []
+        [ Element.el [ alignTop ] (Element.text "Last watered: ")
+        , Element.column [] <|
+            listWithDefault (Element.text "Never") <|
+                List.map (\wg -> Element.text (formatWaterGiven zone time wg)) waterGivens
         ]
 
 
-formatWaterGiven : Time.Zone -> Time.Posix -> Maybe WaterGiven -> String
-formatWaterGiven zone time maybeWaterGiven =
-    case maybeWaterGiven of
-        Nothing ->
-            "Never"
-
-        Just waterGiven ->
-            DateUtil.humaneTimeSince zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
+formatWaterGiven : Time.Zone -> Time.Posix -> WaterGiven -> String
+formatWaterGiven zone time waterGiven =
+    DateUtil.humaneTimeSince zone time waterGiven.start ++ " for " ++ DateUtil.durationConcise waterGiven.seconds
 
 
 lastReadingLabel : Time.Zone -> Time.Posix -> Maybe Sensor -> Maybe SensorReading -> Element Msg
