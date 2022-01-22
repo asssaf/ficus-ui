@@ -429,7 +429,7 @@ partialBar percent backgroundColor =
 
 motorLastWateredLabel : Time.Zone -> Time.Posix -> List WaterGiven -> Element Msg
 motorLastWateredLabel zone time waterGivens =
-    Element.row []
+    Element.paragraph []
         [ Element.el [ alignTop ] (Element.text "Last watered: ")
         , Element.column [] <|
             listWithDefault (Element.text "Never") <|
