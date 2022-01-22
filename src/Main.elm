@@ -113,6 +113,7 @@ initCmd flags =
             Cmd.batch <|
                 List.concat
                     [ [ Task.perform AdjustTimeZone Time.here
+                      , Task.perform Tick Time.now
                       ]
                     , List.map sendQuery Plant.initQueries
                     ]
