@@ -1,4 +1,4 @@
-port module Main exposing (..)
+module Main exposing (..)
 
 import Browser
 import Browser.Events
@@ -8,8 +8,9 @@ import Header
 import Json.Decode
 import Log
 import Login
+import Page.Plants as Plants
 import Plant
-import Query
+import Query exposing (queryResponseReceiver, sendQuery)
 import Result.Extra as Result
 import Task
 import Time
@@ -33,16 +34,6 @@ main =
 
 
 
--- PORTS
-
-
-port sendQuery : Query.Query -> Cmd msg
-
-
-port queryResponseReceiver : (Json.Decode.Value -> msg) -> Sub msg
-
-
-
 -- MODEL
 
 
@@ -61,7 +52,8 @@ type alias Model =
     , zone : Time.Zone
     , time : Time.Posix
     , log : Log.Model
-    , plants : Plant.Model
+    , plantRepository : Plant.Model
+    , plants : Plants.Model
     }
 
 
@@ -95,7 +87,8 @@ init flags url key =
       , zone = Time.utc
       , time = Time.millisToPosix 0
       , log = Log.init
-      , plants = Plant.init
+      , plantRepository = Plant.init
+      , plants = Plants.init
       }
     , initCmd flags
     )
@@ -134,6 +127,7 @@ type Msg
     | LoginMsg Login.Msg
     | HeaderMsg Header.Msg
     | PlantMsg Plant.Msg
+    | PlantsMsg Plants.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -189,12 +183,21 @@ update msg model =
 
         PlantMsg plantMsg ->
             let
-                ( plants, queries ) =
-                    Plant.update plantMsg model.plants
+                ( plantRepository, queries ) =
+                    Plant.update plantMsg model.plantRepository
             in
-            ( { model | plants = plants }
+            ( { model | plantRepository = plantRepository }
             , Cmd.batch <|
                 List.map sendQuery queries
+            )
+
+        PlantsMsg plantsMsg ->
+            let
+                ( plants, cmd ) =
+                    Plants.update plantsMsg model.plants
+            in
+            ( { model | plants = plants }
+            , cmd |> Cmd.map PlantsMsg
             )
 
 
@@ -312,8 +315,8 @@ mainView _ model =
                 [ Header.view |> Element.map HeaderMsg
                 , Log.view model.log
                     |> Element.map LogMsg
-                , Plant.view model.zone model.time model.plants
-                    |> Element.map PlantMsg
+                , Plants.view model.zone model.time (Plant.modelToPlants model.plantRepository) model.plants
+                    |> Element.map PlantsMsg
                 ]
         ]
     }
