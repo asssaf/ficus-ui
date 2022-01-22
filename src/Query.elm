@@ -1,6 +1,20 @@
-module Query exposing (..)
+port module Query exposing (..)
 
 import Json.Decode exposing (..)
+
+
+
+-- PORTS
+
+
+port sendQuery : Query -> Cmd msg
+
+
+port queryResponseReceiver : (Json.Decode.Value -> msg) -> Sub msg
+
+
+
+-- MODEL
 
 
 type alias Query =
